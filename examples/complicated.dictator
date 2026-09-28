@@ -1,0 +1,12 @@
+var vowel = "a" or "e" or "i" or "o" or "u"
+var consonant =
+  "p" or "t" or "k" or "b" or "d" or "g",
+  "f" or "v",
+  "s" or "z",
+  "r" or "l",
+  "x" or "h" or "q"
+
+rule ["p", "t", "k"] -> ["b", "d", "g"] when vowel _ vowel
+
+# same thing
+rule $vowel ["p", "t", "k"] $vowel -> $1 ["b", "d", "g"] $2

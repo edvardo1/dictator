@@ -1,0 +1,37 @@
+define vowel = "a" or "e" or "i" or "o" or "u"
+define consonant =
+	"p" or "t" or "c" or "q" or
+	"b" or "d" or "g" or "m" or
+	"n" or "l" or "r" or "h" or
+	"s"
+
+rule "s" -> "" when _ "
+"
+rule "m" -> "" when _ "
+"
+
+rule "ā" -> "a"
+rule "ē" -> "e"
+rule "ī" -> "i"
+rule "ō" -> "o"
+rule "ū" -> "u"
+
+rule "e" -> "" when vowel "r" _ "
+"
+
+rule "i" -> "j" when _ vowel
+rule "p" -> "b" when vowel _ vowel
+rule "t" -> "d" when vowel _ vowel
+rule "c" -> "g" when vowel _ vowel
+
+rule "v" -> "" when vowel _ vowel
+rule "u" -> "o" when _ "
+"
+rule "gn" -> "nh"
+rule "c" -> "i" when "i" or "e" _ "t"
+rule "c" -> "u" when "o" or "u" _ "t"
+rule "p" -> "" when vowel _ "t"
+rule "ii" -> "i"
+rule "e" -> "" when consonant _ "r" vowel
+
+rule "lj" -> "lh" -- not an actual sound change

@@ -1,4 +1,3 @@
-# wow cool
 rule "p" -> "b" when "a" _ "e"
 rule "t" -> "d" when "e" _ "i"
 rule "k" -> "g" when "i" _ "o"
