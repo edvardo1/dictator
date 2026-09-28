@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define YACSL_IO
 #define YACSL_IMPLEMENTATION
 #include "yacsl.h"
 
@@ -57,6 +58,7 @@ typedef enum {
 	dictator_TokenKind_Break,
 	dictator_TokenKind_Case,
 	dictator_TokenKind_Default,
+	dictator_TokenKind_Define,
 	dictator_TokenKind_Else,
 	dictator_TokenKind_Enum,
 	dictator_TokenKind_Fn,
@@ -68,7 +70,6 @@ typedef enum {
 	dictator_TokenKind_Rule,
 	dictator_TokenKind_Struct,
 	dictator_TokenKind_Union,
-	dictator_TokenKind_Var,
 	dictator_TokenKind_When,
 	dictator_TokenKind_While,
 
@@ -212,6 +213,9 @@ func Void dictator_token_print(dictator_Token *token) {
 	case dictator_TokenKind_Default: {
 		printf("Default\n");
 	} break;
+	case dictator_TokenKind_Define: {
+		printf("Define\n");
+	} break;
 	case dictator_TokenKind_Else: {
 		printf("Else\n");
 	} break;
@@ -244,9 +248,6 @@ func Void dictator_token_print(dictator_Token *token) {
 	} break;
 	case dictator_TokenKind_Union: {
 		printf("Union\n");
-	} break;
-	case dictator_TokenKind_Var: {
-		printf("Var\n");
 	} break;
 	case dictator_TokenKind_When: {
 		printf("When\n");
@@ -336,6 +337,7 @@ func dictator_TokenizerCode dictator_tokenizer_popToken(dictator_Tokenizer *toke
 	Int err = 0;
 	Uint initialIndex = 0, stringLen = 0;
 	Bool isString = false;
+	Bool inComment = false;
 
 	if (tokenizer->hasToken) {
 		if (token != NULL) {
@@ -343,6 +345,17 @@ func dictator_TokenizerCode dictator_tokenizer_popToken(dictator_Tokenizer *toke
 		}
 		tokenizer->hasToken = false;
 		return 0;
+	}
+
+commentLabel:
+	while (inComment) {
+		err = dictator_tokenizer__popChar(tokenizer, &c);
+		if (err) {
+			return err;
+		}
+		if (c == '\n') {
+			break;
+		}
 	}
 
 	err = dictator_tokenizer__peekChar(tokenizer, &c);
@@ -455,6 +468,9 @@ func dictator_TokenizerCode dictator_tokenizer_popToken(dictator_Tokenizer *toke
 				} else if (c == '>') {
 					tokenizer->token.kind = dictator_TokenKind_ArrowRight;
 					assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
+				} else if (c == '-') {
+					inComment = true;
+					goto commentLabel;
 				}
 			}
 			if (token != NULL) {
@@ -549,7 +565,11 @@ func dictator_TokenizerCode dictator_tokenizer_popToken(dictator_Tokenizer *toke
 			}
 			return 0;
 		} else {
-			if (c == '"') {
+			Bool isSingleQuote = false;
+			if (c == '"' || c == '\'') {
+				if (c == '\'') {
+					isSingleQuote = true;
+				}
 				isString = true;
 				assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
 				assert(dictator_tokenizer__peekChar(tokenizer, &c) == 0);
@@ -562,7 +582,7 @@ func dictator_TokenizerCode dictator_tokenizer_popToken(dictator_Tokenizer *toke
 					if (err != 0) {
 						assert(0);
 					}
-					if (err == 0 && c == '"') {
+					if (err == 0 && ((c == '"' && !isSingleQuote) || (c == '\'' && isSingleQuote))) {
 						assert(dictator_tokenizer__popChar(tokenizer, &c) == err);
 						tokenizer->token.kind = dictator_TokenKind_String;
 						tokenizer->token.as.string.string.buf = &tokenizer->string.buf[initialIndex];
@@ -605,6 +625,8 @@ func dictator_TokenizerCode dictator_tokenizer_popToken(dictator_Tokenizer *toke
 								tokenizer->token.kind = dictator_TokenKind_Case;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("default"))) {
 								tokenizer->token.kind = dictator_TokenKind_Default;
+							} else if (strEq(tokenizer->token.as.identifier.string, S("define"))) {
+								tokenizer->token.kind = dictator_TokenKind_Define;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("else"))) {
 								tokenizer->token.kind = dictator_TokenKind_Else;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("enum"))) {
@@ -627,8 +649,6 @@ func dictator_TokenizerCode dictator_tokenizer_popToken(dictator_Tokenizer *toke
 								tokenizer->token.kind = dictator_TokenKind_Struct;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("union"))) {
 								tokenizer->token.kind = dictator_TokenKind_Union;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("var"))) {
-								tokenizer->token.kind = dictator_TokenKind_Var;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("while"))) {
 								tokenizer->token.kind = dictator_TokenKind_While;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("when"))) {
@@ -821,7 +841,7 @@ struct dictator_Parser {
 	dictator_Tokenizer tokenizer;
 };
 
-struct dictator_Variable {
+struct dictator_Definition {
 	String8 name;
 	dictator_Pattern pattern;
 };
@@ -835,7 +855,7 @@ struct dictator_Rule {
 
 struct dictator_Replacer {
 	DynamicArray(dictator_Rule) rules;
-	DynamicArray(dictator_Variable) variables;
+	DynamicArray(dictator_Definition) definitions;
 };
 
 Int dictator_tryParsePatternPrimary(dictator_Parser *parser, dictator_Pattern *pattern) {
@@ -953,15 +973,16 @@ Int dictator_tryParseRule(dictator_Parser *parser, dictator_Rule *rule) {
 	return 0;
 }
 
-Int dictator_tryParseVariable(dictator_Parser *parser, dictator_Variable *var) {
+Int dictator_tryParseDefinition(dictator_Parser *parser, dictator_Definition *var) {
 	dictator_Token token = {0};
 	memZero(var, sizeof(*var));
 	if (dictator_tokenizer_peekToken(&parser->tokenizer, &token) != dictator_TokenizerCode_Ok) {
 		return 1;
 	}
-	if (token.kind != dictator_TokenKind_Var) {
+	if (token.kind != dictator_TokenKind_Define) {
 		return 1;
 	}
+	assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
 
 	assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
 	assert(token.kind == dictator_TokenKind_Identifier);
@@ -977,13 +998,13 @@ Int dictator_tryParseVariable(dictator_Parser *parser, dictator_Variable *var) {
 
 func Int dictator_tryParseReplacer(dictator_Parser *parser, dictator_Replacer *substituter) {
 	dictator_Rule rule = {0};
-	dictator_Variable variable = {0};
+	dictator_Definition definition = {0};
 
 	for (;;) {
 		if (dictator_tryParseRule(parser, &rule) == 0) {
 			da_append(&substituter->rules, rule);
-		} else if (dictator_tryParseVariable(parser, &variable) == 0) {
-			da_append(&substituter->variables, variable);
+		} else if (dictator_tryParseDefinition(parser, &definition) == 0) {
+			da_append(&substituter->definitions, definition);
 		} else {
 			break;
 		}
@@ -1109,14 +1130,8 @@ struct dictator_Matches {
 
 /* maybe change replacer to Environment */
 func Bool dictator_doesMatch(const dictator_Replacer *replacer, const dictator_Pattern *pattern, const String8 buffer, Usize index, Usize *len) {
-	UNUSED(replacer);
-	UNUSED(pattern);
-	UNUSED(buffer);
-	UNUSED(index);
-	UNUSED(len);
 	switch (pattern->kind) {
 	case dictator_PatternKind_String: {
-		/* printf("{%.*s} {%.*s}\n", Slens(pattern->as.string), Slens(strSlice(buffer, index, pattern->as.string.len))); */
 		if (pattern->as.string.len <= buffer.len - index) {
 			if (strEq(pattern->as.string, strSlice(buffer, index, pattern->as.string.len))) {
 				*len = pattern->as.string.len;
@@ -1132,7 +1147,13 @@ func Bool dictator_doesMatch(const dictator_Replacer *replacer, const dictator_P
 		assert(0);
 	} break;
 	case dictator_PatternKind_Or: {
-		assert(0);
+		Usize orIndex = 0;
+		for (orIndex = 0; orIndex < pattern->as.or.len; orIndex += 1) {
+			if (dictator_doesMatch(replacer, &pattern->as.or.items[orIndex], buffer, index, len)) {
+				return true;
+			}
+		}
+		return false;
 	} break;
 	case dictator_PatternKind_Concatenation: {
 		assert(0);
@@ -1191,31 +1212,211 @@ func Void dictator_getMatches(const dictator_Replacer *replacer, const dictator_
 	}
 }
 
-Int main() {
+func Void dictator_applyRule(const dictator_Replacer *replacer, const dictator_Rule *rule, const String8 buffer, String8 *newBuffer) {
+	dictator_Matches matches = {0};
+	Usize matchIndex = 0;
+	Usize newIndex = 0, newLen = buffer.len;
+	Usize oldIndex = 0, oldLen = buffer.len;
+
+	dictator_getMatches(replacer, rule, buffer, &matches);
+	assert(rule->after.kind == dictator_PatternKind_String);
+	for (matchIndex = 0; matchIndex < matches.len; matchIndex += 1) {
+		newLen -= matches.items[matchIndex].len;
+		newLen += rule->after.as.string.len;
+	}
+
+	if (matches.len == 0) {
+		newBuffer->buf = strdup(buffer.buf);
+		newBuffer->len = buffer.len;
+		return;
+	}
+
+	newBuffer->buf = malloc(newLen);
+	newBuffer->len = newLen;
+
+	for (matchIndex = 0; matchIndex < matches.len; matchIndex += 1) {
+		/* append to buffer */
+		Usize copyLen = matches.items[matchIndex].index - oldIndex;
+		assert(matches.items[matchIndex].index >= oldIndex);
+		if (copyLen > 0) {
+			memcpy(&newBuffer->buf[newIndex], &buffer.buf[oldIndex], copyLen);
+			newIndex += copyLen;
+			oldIndex += copyLen;
+		}
+		oldIndex += matches.items[matchIndex].len;
+		memcpy(&newBuffer->buf[newIndex], rule->after.as.string.buf, rule->after.as.string.len);
+		newIndex += rule->after.as.string.len;
+	}
+	/* last one */
+	if (newIndex != newLen) {
+		Usize copyLen = oldLen - oldIndex;
+		assert(oldLen > oldIndex);
+		assert(copyLen > 0);
+		memcpy(&newBuffer->buf[newIndex], &buffer.buf[oldIndex], copyLen);
+		newIndex += copyLen;
+		oldIndex += copyLen;
+	}
+
+	da_free(&matches);
+}
+
+func Bool dictator_getDefinition(dictator_Replacer *replacer, String8 name, dictator_Pattern *pattern) {
+	Usize definitionIndex = 0;
+	for (definitionIndex = 0; definitionIndex < replacer->definitions.len; definitionIndex += 1) {
+		if (strEq(replacer->definitions.items[definitionIndex].name, name)) {
+			*pattern = replacer->definitions.items[definitionIndex].pattern;
+			return true;
+		}
+	}
+	return false;
+}
+
+func Bool dictator_preprocessPattern(dictator_Replacer *replacer, dictator_Pattern *pattern) {
+	switch (pattern->kind) {
+	case dictator_PatternKind_String: {
+		return false;
+	} break;
+	case dictator_PatternKind_Identifier: {
+		dictator_Pattern truePattern = {0};
+		if (dictator_getDefinition(replacer, pattern->as.identifier, &truePattern)) {
+			*pattern = truePattern;
+			return true;
+		} else {
+			return false;
+		}
+	} break;
+	case dictator_PatternKind_SmallInteger: {
+		return false;
+	} break;
+	case dictator_PatternKind_Or: {
+		Usize orIndex = 0;
+		Bool changed = false;
+		for (orIndex = 0; orIndex < pattern->as.or.len; orIndex += 1) {
+			if (dictator_preprocessPattern(replacer, &pattern->as.or.items[orIndex])) {
+				changed = true;
+			}
+		}
+		return changed;
+	} break;
+	case dictator_PatternKind_Concatenation: {
+		Usize concatenationIndex = 0;
+		Bool changed = false;
+		for (concatenationIndex = 0; concatenationIndex < pattern->as.concatenation.len; concatenationIndex += 1) {
+			if (dictator_preprocessPattern(replacer, &pattern->as.concatenation.items[concatenationIndex])) {
+				changed = true;
+			}
+		}
+		return changed;
+	} break;
+	case dictator_PatternKind_List: {
+		Usize listIndex = 0;
+		Bool changed = false;
+		for (listIndex = 0; listIndex < pattern->as.list.len; listIndex += 1) {
+			if (dictator_preprocessPattern(replacer, &pattern->as.list.items[listIndex])) {
+				changed = true;
+			}
+		}
+		return changed;
+	} break;
+	}
+	assert(0);
+}
+
+Void dictator_preprocessDefinitions(dictator_Replacer *replacer) {
+	Usize definitionIndex = 0;
+	for (definitionIndex = 0; definitionIndex < replacer->definitions.len; definitionIndex += 1) {
+		dictator_Definition *definition = &replacer->definitions.items[definitionIndex];
+		dictator_preprocessPattern(replacer, &definition->pattern);
+	}
+}
+
+Void dictator_preprocessRules(dictator_Replacer *replacer) {
+	Usize ruleIndex = 0;
+	for (ruleIndex = 0; ruleIndex < replacer->rules.len; ruleIndex += 1) {
+		dictator_Rule *rule = &replacer->rules.items[ruleIndex];
+		dictator_preprocessPattern(replacer, &rule->before);
+		dictator_preprocessPattern(replacer, &rule->when);
+	}
+}
+
+func Void dictator_preprocess(dictator_Replacer *replacer) {
+	/* const Usize maxIter = 5000; */
+	/* Usize iterCount = 0; */
+	dictator_preprocessDefinitions(replacer);
+	dictator_preprocessRules(replacer);
+}
+
+func Void slurpFile(String8 filepath, String8 *out) {
+	if (strEq(filepath, S("-"))) {
+		Usize size = 1024;
+		out->buf = calloc(size, 1);
+		for (;;) {
+			Usize fsize = fread(&out->buf[size - 1024], 1, 1024, stdin);
+			if (fsize < 1024) {
+				break;
+			}
+			size += 1024;
+			out->buf = realloc(out->buf, size);
+			out->buf[size] = '\0';
+		}
+		out->len = strlen(out->buf);
+	} else {
+		FILE *fp = fopen(filepath.buf, "r");
+		readWholeFile(fp, NULL, &out->len);
+		out->buf = malloc(out->len);
+		readWholeFile(fp, (U8 **)&out->buf, &out->len);
+		fclose(fp);
+	}
+}
+
+func Int main(Int argc, Char **argv) {
 	dictator_Parser parser = {0};
 	dictator_Replacer replacer = {0};
+	String8 rulesSource = {0}, textSource = {0};
+	String8 rulesBuffer = {0}, textBuffer = {0};
 
 	test_tokenizer();
 	test_parser();
 
-	dictator_tokenizer_init(&parser.tokenizer, S("rule \"p\" -> \"b\" when \"a\" _ \"e\""));
+	argc -= 1;
+	argv += 1;
+	while (argc > 0) {
+		if (strcmp(*argv, "-r") == 0) {
+			assert(argc > 1);
+			argc -= 1;
+			argv += 1;
+			rulesSource = string8FromCstr(*argv, strlen(*argv));
+		} else if (strcmp(*argv, "-t") == 0) {
+			assert(argc != 0);
+			argc -= 1;
+			argv += 1;
+			textSource = string8FromCstr(*argv, strlen(*argv));
+		}
+		argc -= 1;
+		argv += 1;
+	}
+
+	assert(rulesSource.len != 0);
+	assert(textSource.len != 0);
+
+	slurpFile(rulesSource, &rulesBuffer);
+	slurpFile(textSource, &textBuffer);
+
+	printf("rules: %.*s\n", Slens(rulesBuffer));
+	printf("text: %.*s\n", Slens(textBuffer));
+
+	dictator_tokenizer_init(&parser.tokenizer, rulesBuffer);
 	assert(dictator_tryParseReplacer(&parser, &replacer) == 0);
+	dictator_preprocess(&replacer);
 	{
-		String8 buffer = S("papepapepapo");
-		dictator_Matches matches = {0};
+		String8 buffer = textBuffer;
+		String8 newBuffer = {0};
 		Usize ruleIndex = 0;
-		Usize matchIndex = 0;
 		for (ruleIndex = 0; ruleIndex < replacer.rules.len; ruleIndex += 1) {
-			dictator_getMatches(&replacer, &replacer.rules.items[ruleIndex], buffer, &matches);
+			dictator_applyRule(&replacer, &replacer.rules.items[ruleIndex], buffer, &newBuffer);
+			buffer = newBuffer;
 		}
-		printf("matches.len: %ld\n", matches.len);
-		for (matchIndex = 0; matchIndex < matches.len; matchIndex += 1) {
-			printf(
-				"(match :index %ld :len %ld)\n",
-				matches.items[matchIndex].index,
-				matches.items[matchIndex].len
-			);
-		}
+		printf("%.*s\n", Slens(buffer));
 	}
 
 	return 0;
