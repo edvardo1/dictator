@@ -3,11 +3,11 @@
 (defvar dictator-mode-syntax-table
   (let ((table (make-syntax-table)))
 	(modify-syntax-entry ?' "\"" table)
-    (modify-syntax-entry ?# "<" table)
-    (modify-syntax-entry ?\n ">" table)
+	(modify-syntax-entry ?- ". 12b" table)
+	(modify-syntax-entry ?\n "> b" table)
     table))
 
-(defun dictator-keywords () '("rule" "when" "var" "->" "_"))
+(defun dictator-keywords () '("rule" "when" "define" "->" "or" "_"))
 
 (defun dictator-font-lock-keywords ()
   (list
@@ -21,8 +21,6 @@
 (define-derived-mode dictator-mode prog-mode "dictator"
   "simple major mode for editing dictator files"
   :syntax-table dictator-mode-syntax-table
-  (setq-local font-lock-defaults '(dictator-font-lock-keywords))
-  (setq-local comment-start "# ")
-  )
+  (setq-local font-lock-defaults '(dictator-font-lock-keywords)))
 
 (provide 'dictator-mode)
