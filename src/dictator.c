@@ -62,6 +62,7 @@ typedef enum {
 	dictator_TokenKind_Fn,
 	dictator_TokenKind_For,
 	dictator_TokenKind_If,
+	dictator_TokenKind_Or,
 	dictator_TokenKind_Panic,
 	dictator_TokenKind_Return,
 	dictator_TokenKind_Rule,
@@ -225,6 +226,9 @@ func Void dictator_token_print(dictator_Token *token) {
 	} break;
 	case dictator_TokenKind_If: {
 		printf("If\n");
+	} break;
+	case dictator_TokenKind_Or: {
+		printf("Or\n");
 	} break;
 	case dictator_TokenKind_Panic: {
 		printf("Panic\n");
@@ -611,6 +615,8 @@ func dictator_TokenizerCode dictator_tokenizer_popToken(dictator_Tokenizer *toke
 								tokenizer->token.kind = dictator_TokenKind_For;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("if"))) {
 								tokenizer->token.kind = dictator_TokenKind_If;
+							} else if (strEq(tokenizer->token.as.identifier.string, S("or"))) {
+								tokenizer->token.kind = dictator_TokenKind_Or;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("panic"))) {
 								tokenizer->token.kind = dictator_TokenKind_Panic;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("return"))) {
@@ -743,124 +749,184 @@ func Void test_tokenizer_1(Void) {
 }
 
 typedef enum {
-	dictator_PatternAtomNodeKind_String,
-	dictator_PatternAtomNodeKind_Identifier,
-	dictator_PatternAtomNodeKind_SmallInteger
-} dictator_PatternAtomNodeKind;
+	dictator_PatternKind_String,
+	dictator_PatternKind_Identifier,
+	dictator_PatternKind_SmallInteger,
+	dictator_PatternKind_Or,
+	dictator_PatternKind_Concatenation,
+	dictator_PatternKind_List
+} dictator_PatternKind;
 
-struct dictator_PatternAtomNode {
-	dictator_PatternAtomNodeKind kind;
+struct dictator_Pattern {
+	dictator_PatternKind kind;
+	Bool marked;
 	union {
 		String8 string;
 		String8 identifier;
 		I32 smallInteger;
+		DynamicArray(dictator_Pattern) or;
+		DynamicArray(dictator_Pattern) concatenation;
+		DynamicArray(dictator_Pattern) list;
 	} as;
 };
 
-struct dictator_PatternNode {
-	dictator_PatternAtomNode *items;
-	Usize len;
-	Usize capacity;
-};
-
-func Void dictator_patternAtomPrint(dictator_PatternAtomNode *atom) {
+func Void dictator_patternPrint(dictator_Pattern *atom) {
+	Usize index = 0;
+	if (atom->marked) {
+		printf("$");
+	}
 	printf("(");
 	switch (atom->kind) {
-	case dictator_PatternAtomNodeKind_String: {
-		printf("String %.*s", Slens(atom->as.string));
+	case dictator_PatternKind_String: {
+		printf("string %.*s", Slens(atom->as.string));
 	} break;
-	case dictator_PatternAtomNodeKind_Identifier: {
-		printf("Identifier %.*s", Slens(atom->as.identifier));
+	case dictator_PatternKind_Identifier: {
+		printf("identifier %.*s", Slens(atom->as.identifier));
 	} break;
-	case dictator_PatternAtomNodeKind_SmallInteger: {
-		printf("Identifier %d", atom->as.smallInteger);
+	case dictator_PatternKind_SmallInteger: {
+		printf("small_integer %d", atom->as.smallInteger);
+	} break;
+	case dictator_PatternKind_Or: {
+		printf("or ");
+		for (index = 0; index < atom->as.or.len; index += 1) {
+			if (index != 0) {
+				printf(" ");
+			}
+			dictator_patternPrint(&atom->as.or.items[index]);
+		}
+	} break;
+	case dictator_PatternKind_List: {
+		printf("list ");
+		for (index = 0; index < atom->as.list.len; index += 1) {
+			if (index != 0) {
+				printf(" ");
+			}
+			dictator_patternPrint(&atom->as.list.items[index]);
+		}
+	} break;
+	case dictator_PatternKind_Concatenation: {
+		printf("concatenation ");
+		for (index = 0; index < atom->as.concatenation.len; index += 1) {
+			if (index != 0) {
+				printf(" ");
+			}
+			dictator_patternPrint(&atom->as.concatenation.items[index]);
+		}
 	} break;
 	}
 	printf(")");
 }
 
-func Void dictator_patternPrint(dictator_PatternNode *pattern) {
-	Usize index = 0;
-	printf("[Pattern ");
-	for (index = 0; index < pattern->len; index += 1) {
-		if (index != 0) {
-			printf(" ");
-		}
-		dictator_patternAtomPrint(&pattern->items[index]);
-	}
-	printf("]\n");
-}
-
-typedef enum {
-	dictator_TopNodeKind_Var,
-	dictator_TopNodeKind_Rule
-} dictator_TopNodeKind;
-
-struct dictator_TopNode {
-	dictator_TopNodeKind kind;
-	union {
-		struct {
-			dictator_PatternNode before;
-			dictator_PatternNode after;
-			dictator_PatternNode when;
-		} rule;
-		struct {
-			String8 name;
-			dictator_PatternNode value;
-		} var;
-	} as;
-};
-
-struct dictator_BufferNode {
-	dictator_TopNode *items;
-	Usize len;
-	Usize capacity;
-};
-
 struct dictator_Parser {
 	dictator_Tokenizer tokenizer;
 };
 
-Int dictator_tryParsePattern(dictator_Parser *parser, dictator_PatternNode *pattern) {
+struct dictator_Variable {
+	String8 name;
+	dictator_Pattern pattern;
+};
+
+struct dictator_Rule {
+	dictator_Pattern before;
+	dictator_Pattern after;
+	dictator_Pattern when;
+	Bool hasWhen;
+};
+
+struct dictator_Replacer {
+	DynamicArray(dictator_Rule) rules;
+	DynamicArray(dictator_Variable) variables;
+};
+
+Int dictator_tryParsePatternPrimary(dictator_Parser *parser, dictator_Pattern *pattern) {
 	dictator_Token token = {0};
-	dictator_PatternAtomNode atomNode = {0};
-	Usize count = 0;
 	memZero(pattern, sizeof(*pattern));
-	for (;; count += 1) {
-		if (dictator_tokenizer_peekToken(&parser->tokenizer, &token) != dictator_TokenizerCode_Ok) {
-			if (count > 0) {
-				return 0;
-			} else {
-				return 1;
-			}
-		}
 
-		if (token.kind == dictator_TokenKind_Identifier) {
-			atomNode.kind = dictator_PatternAtomNodeKind_Identifier;
-			atomNode.as.identifier = token.as.identifier.string;
-		} else if (token.kind == dictator_TokenKind_String) {
-			atomNode.kind = dictator_PatternAtomNodeKind_String;
-			atomNode.as.string = token.as.string.string;
-		} else if (token.kind == dictator_TokenKind_SmallInteger) {
-			atomNode.kind = dictator_PatternAtomNodeKind_SmallInteger;
-			atomNode.as.smallInteger = token.as.smallInteger;
-		} else {
-			if (count > 0) {
-				return 0;
-			} else {
-				return 1;
-			}
-		}
-
-		assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
-		da_append(pattern, atomNode);
+	if (dictator_tokenizer_peekToken(&parser->tokenizer, &token) != dictator_TokenizerCode_Ok) {
+		return 1;
 	}
+
+	if (token.kind == dictator_TokenKind_Identifier) {
+		pattern->kind = dictator_PatternKind_Identifier;
+		pattern->as.identifier = token.as.identifier.string;
+	} else if (token.kind == dictator_TokenKind_String) {
+		pattern->kind = dictator_PatternKind_String;
+		pattern->as.string = token.as.string.string;
+	} else if (token.kind == dictator_TokenKind_SmallInteger) {
+		pattern->kind = dictator_PatternKind_SmallInteger;
+		pattern->as.smallInteger = token.as.smallInteger;
+	} else {
+		return 1;
+	}
+
+	assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+
 	return 0;
 }
 
-Int dictator_tryParseRule(dictator_Parser *parser, dictator_TopNode *node) {
+Int dictator_tryParsePatternOr(dictator_Parser *parser, dictator_Pattern *pattern) {
 	dictator_Token token = {0};
-	memZero(node, sizeof(*node));
+	memZero(pattern, sizeof(*pattern));
+	dictator_Pattern individualPattern = {0};
+
+	if (dictator_tryParsePatternPrimary(parser, &individualPattern) == 1) {
+		return 1;
+	}
+
+	if (
+		dictator_tokenizer_peekToken(&parser->tokenizer, &token) != dictator_TokenizerCode_Ok ||
+		token.kind != dictator_TokenKind_Or
+	) {
+		*pattern = individualPattern;
+		return 0;
+	}
+	pattern->kind = dictator_PatternKind_Or;
+	da_append(&pattern->as.or, individualPattern);
+	for (;;) {
+		if (token.kind != dictator_TokenKind_Or) {
+			break;
+		}
+		assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+		dictator_tryParsePatternPrimary(parser, &individualPattern);
+		da_append(&pattern->as.or, individualPattern);
+		if (dictator_tokenizer_peekToken(&parser->tokenizer, &token) != dictator_TokenizerCode_Ok) {
+			break;
+		}
+	}
+
+	return 0;
+}
+
+Int dictator_tryParsePatternConcat(dictator_Parser *parser, dictator_Pattern *pattern) {
+	memZero(pattern, sizeof(*pattern));
+	dictator_Pattern firstPattern = {0};
+	dictator_Pattern individualPattern = {0};
+
+	if (dictator_tryParsePatternOr(parser, &firstPattern) == 1) {
+		return 1;
+	}
+	if (dictator_tryParsePatternOr(parser, &individualPattern) == 1) {
+		*pattern = firstPattern;
+		return 0;
+	}
+
+	pattern->kind = dictator_PatternKind_Concatenation;
+	da_append(&pattern->as.concatenation, firstPattern);
+	da_append(&pattern->as.concatenation, individualPattern);
+	for (;;) {
+		if (dictator_tryParsePatternOr(parser, &individualPattern) == 0) {
+			da_append(&pattern->as.or, individualPattern);
+		} else {
+			return 0;
+		}
+	}
+}
+
+#define dictator_tryParsePattern dictator_tryParsePatternConcat
+
+Int dictator_tryParseRule(dictator_Parser *parser, dictator_Rule *rule) {
+	dictator_Token token = {0};
+	memZero(rule, sizeof(*rule));
 	if (dictator_tokenizer_peekToken(&parser->tokenizer, &token) != dictator_TokenizerCode_Ok) {
 		return 1;
 	}
@@ -868,154 +934,289 @@ Int dictator_tryParseRule(dictator_Parser *parser, dictator_TopNode *node) {
 		return 1;
 	}
 	assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
-	node->kind = dictator_TopNodeKind_Rule;
 
-	assert(dictator_tryParsePattern(parser, &node->as.rule.before) == 0);
+	assert(dictator_tryParsePattern(parser, &rule->before) == 0);
 	assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
 	assert(token.kind == dictator_TokenKind_ArrowRight);
-	assert(dictator_tryParsePattern(parser, &node->as.rule.after) == 0);
+	assert(dictator_tryParsePattern(parser, &rule->after) == 0);
 
 	if (
 		dictator_tokenizer_peekToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok &&
 		token.kind == dictator_TokenKind_When
 	) {
 		/* has when */
+		rule->hasWhen = true;
 		assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
-		assert(dictator_tryParsePattern(parser, &node->as.rule.when) == 0);
+		assert(dictator_tryParsePattern(parser, &rule->when) == 0);
 	}
 
 	return 0;
 }
 
-Void dictator_tryParseBuffer(dictator_Parser *parser, dictator_BufferNode *bufferNode) {
-	dictator_TopNode topNode = {0};
+Int dictator_tryParseVariable(dictator_Parser *parser, dictator_Variable *var) {
+	dictator_Token token = {0};
+	memZero(var, sizeof(*var));
+	if (dictator_tokenizer_peekToken(&parser->tokenizer, &token) != dictator_TokenizerCode_Ok) {
+		return 1;
+	}
+	if (token.kind != dictator_TokenKind_Var) {
+		return 1;
+	}
+
+	assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+	assert(token.kind == dictator_TokenKind_Identifier);
+	var->name = token.as.identifier.string;
+
+	assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+	assert(token.kind == dictator_TokenKind_Equals);
+
+	assert(dictator_tryParsePattern(parser, &var->pattern) == 0);
+
+	return 0;
+}
+
+func Int dictator_tryParseReplacer(dictator_Parser *parser, dictator_Replacer *substituter) {
+	dictator_Rule rule = {0};
+	dictator_Variable variable = {0};
+
 	for (;;) {
-		if (dictator_tryParseRule(parser, &topNode) == 0) {
-			da_append(bufferNode, topNode);
+		if (dictator_tryParseRule(parser, &rule) == 0) {
+			da_append(&substituter->rules, rule);
+		} else if (dictator_tryParseVariable(parser, &variable) == 0) {
+			da_append(&substituter->variables, variable);
 		} else {
 			break;
 		}
 	}
+	
+	return 0;
 }
 
 func Void test_parser(Void) {
 	test_parser_0();
-	test_parser_1();
-	test_parser_2();
-	test_parser_3();
+	/* test_parser_1(); */
+	/* test_parser_2(); */
+	/* test_parser_3(); */
 }
 
 func Void test_parser_0(Void) {
 	dictator_Parser parser = {0};
-	dictator_PatternNode pattern = {0};
+	dictator_Pattern pattern = {0};
 	dictator_tokenizer_init(&parser.tokenizer, S("a \"p\" b"));
 	TEST_EQ(dictator_tryParsePattern(&parser, &pattern), 0);
-	TEST_EQ(pattern.len, 3);
-	TEST_EQ(pattern.items[0].kind, dictator_PatternAtomNodeKind_Identifier);
-	TEST_EQ(strEq(pattern.items[0].as.identifier, S("a")), true);
-	TEST_EQ(pattern.items[1].kind, dictator_PatternAtomNodeKind_String);
-	TEST_EQ(strEq(pattern.items[1].as.string, S("p")), true);
-	TEST_EQ(pattern.items[2].kind, dictator_PatternAtomNodeKind_Identifier);
-	TEST_EQ(strEq(pattern.items[2].as.identifier, S("b")), true);
+	TEST_EQ(pattern.kind, dictator_PatternKind_Concatenation);
+	TEST_EQ(pattern.as.concatenation.len, 3);
+	TEST_EQ(pattern.as.concatenation.items[0].kind, dictator_PatternKind_Identifier);
+	TEST_EQ(strEq(pattern.as.concatenation.items[0].as.identifier, S("a")), true);
+	TEST_EQ(pattern.as.concatenation.items[1].kind, dictator_PatternKind_String);
+	TEST_EQ(strEq(pattern.as.concatenation.items[1].as.string, S("p")), true);
+	TEST_EQ(pattern.as.concatenation.items[2].kind, dictator_PatternKind_Identifier);
+	TEST_EQ(strEq(pattern.as.concatenation.items[2].as.identifier, S("b")), true);
 }
 
 func Void test_parser_1(Void) {
 	dictator_Parser parser = {0};
-	dictator_TopNode topNode = {0};
+	dictator_Rule rule = {0};
 	dictator_tokenizer_init(&parser.tokenizer, S("rule \"p\" -> \"b\""));
-	TEST_EQ(dictator_tryParseRule(&parser, &topNode), 0);
-	TEST_EQ(topNode.kind, dictator_TopNodeKind_Rule);
-	TEST_EQ(topNode.as.rule.before.len, 1);
-	TEST_EQ(topNode.as.rule.before.items[0].kind, dictator_PatternAtomNodeKind_String);
-	TEST_EQ(strEq(topNode.as.rule.before.items[0].as.string, S("p")), true);
-	TEST_EQ(topNode.as.rule.after.len, 1);
-	TEST_EQ(topNode.as.rule.after.items[0].kind, dictator_PatternAtomNodeKind_String);
-	TEST_EQ(strEq(topNode.as.rule.after.items[0].as.string, S("b")), true);
-	TEST_EQ(topNode.as.rule.when.len, 0);
+	TEST_EQ(dictator_tryParseRule(&parser, &rule), 0);
+	TEST_EQ(rule.before.kind, dictator_PatternKind_String);
+	TEST_EQ(strEq(rule.before.as.string, S("p")), true);
+	TEST_EQ(rule.after.kind, dictator_PatternKind_String);
+	TEST_EQ(strEq(rule.after.as.string, S("p")), true);
+	TEST_EQ(rule.hasWhen, false);
 }
 
 func Void test_parser_2(Void) {
 	dictator_Parser parser = {0};
-	dictator_TopNode topNode = {0};
+	dictator_Rule rule = {0};
 	dictator_tokenizer_init(&parser.tokenizer, S("rule \"p\" -> \"b\" when vowel _ consonant"));
-	TEST_EQ(dictator_tryParseRule(&parser, &topNode), 0);
-	TEST_EQ(topNode.kind, dictator_TopNodeKind_Rule);
-	TEST_EQ(topNode.as.rule.before.len, 1);
-	TEST_EQ(topNode.as.rule.before.items[0].kind, dictator_PatternAtomNodeKind_String);
-	TEST_EQ(strEq(topNode.as.rule.before.items[0].as.string, S("p")), true);
-	TEST_EQ(topNode.as.rule.after.len, 1);
-	TEST_EQ(topNode.as.rule.after.items[0].kind, dictator_PatternAtomNodeKind_String);
-	TEST_EQ(strEq(topNode.as.rule.after.items[0].as.string, S("b")), true);
-	TEST_EQ(topNode.as.rule.when.items[0].kind, dictator_PatternAtomNodeKind_Identifier);
-	TEST_EQ(strEq(topNode.as.rule.when.items[0].as.identifier, S("vowel")), true);
-	TEST_EQ(topNode.as.rule.when.items[1].kind, dictator_PatternAtomNodeKind_Identifier);
-	TEST_EQ(strEq(topNode.as.rule.when.items[1].as.identifier, S("_")), true);
-	TEST_EQ(topNode.as.rule.when.items[2].kind, dictator_PatternAtomNodeKind_Identifier);
-	TEST_EQ(strEq(topNode.as.rule.when.items[2].as.identifier, S("consonant")), true);
+	TEST_EQ(dictator_tryParseRule(&parser, &rule), 0);
+	TEST_EQ(rule.before.kind, dictator_PatternKind_String);
+	TEST_EQ(strEq(rule.before.as.string, S("p")), true);
+	TEST_EQ(rule.after.kind, dictator_PatternKind_String);
+	TEST_EQ(strEq(rule.after.as.string, S("p")), true);
+	TEST_EQ(rule.hasWhen, true);
+	TEST_EQ(rule.when.kind, dictator_PatternKind_Concatenation);
+	TEST_EQ(rule.when.as.concatenation.len, 3);
+	TEST_EQ(rule.when.as.concatenation.items[0].kind, dictator_PatternKind_Identifier);
+	TEST_EQ(strEq(rule.when.as.concatenation.items[0].as.identifier, S("vowel")), true);
+	TEST_EQ(rule.when.as.concatenation.items[1].kind, dictator_PatternKind_Identifier);
+	TEST_EQ(strEq(rule.when.as.concatenation.items[1].as.identifier, S("_")), true);
+	TEST_EQ(rule.when.as.concatenation.items[2].kind, dictator_PatternKind_Identifier);
+	TEST_EQ(strEq(rule.when.as.concatenation.items[2].as.identifier, S("consonant")), true);
 }
 
-func Void test_parser_3_helper(dictator_TopNode *topNode, String8 before, String8 after) {
-	TEST_EQ(topNode->kind, dictator_TopNodeKind_Rule);
-	TEST_EQ(topNode->as.rule.before.len, 1);
-	TEST_EQ(topNode->as.rule.before.items[0].kind, dictator_PatternAtomNodeKind_String);
-	TEST_EQ(strEq(topNode->as.rule.before.items[0].as.string, before), true);
-	TEST_EQ(topNode->as.rule.after.len, 1);
-	TEST_EQ(topNode->as.rule.after.items[0].kind, dictator_PatternAtomNodeKind_String);
-	TEST_EQ(strEq(topNode->as.rule.after.items[0].as.string, after), true);
-	TEST_EQ(topNode->as.rule.when.items[0].kind, dictator_PatternAtomNodeKind_Identifier);
-	TEST_EQ(strEq(topNode->as.rule.when.items[0].as.identifier, S("vowel")), true);
-	TEST_EQ(topNode->as.rule.when.items[1].kind, dictator_PatternAtomNodeKind_Identifier);
-	TEST_EQ(strEq(topNode->as.rule.when.items[1].as.identifier, S("_")), true);
-	TEST_EQ(topNode->as.rule.when.items[2].kind, dictator_PatternAtomNodeKind_Identifier);
-	TEST_EQ(strEq(topNode->as.rule.when.items[2].as.identifier, S("vowel")), true);
-}
+/* func Void test_parser_3_helper(dictator_TopNode *topNode, String8 before, String8 after) { */
+/* 	TEST_EQ(topNode->kind, dictator_TopNodeKind_Rule); */
+/* 	TEST_EQ(topNode->as.rule.before.len, 1); */
+/* 	TEST_EQ(topNode->as.rule.before.items[0].kind, dictator_PatternKind_String); */
+/* 	TEST_EQ(strEq(topNode->as.rule.before.items[0].as.string, before), true); */
+/* 	TEST_EQ(topNode->as.rule.after.len, 1); */
+/* 	TEST_EQ(topNode->as.rule.after.items[0].kind, dictator_PatternKind_String); */
+/* 	TEST_EQ(strEq(topNode->as.rule.after.items[0].as.string, after), true); */
+/* 	TEST_EQ(topNode->as.rule.when.items[0].kind, dictator_PatternKind_Identifier); */
+/* 	TEST_EQ(strEq(topNode->as.rule.when.items[0].as.identifier, S("vowel")), true); */
+/* 	TEST_EQ(topNode->as.rule.when.items[1].kind, dictator_PatternKind_Identifier); */
+/* 	TEST_EQ(strEq(topNode->as.rule.when.items[1].as.identifier, S("_")), true); */
+/* 	TEST_EQ(topNode->as.rule.when.items[2].kind, dictator_PatternKind_Identifier); */
+/* 	TEST_EQ(strEq(topNode->as.rule.when.items[2].as.identifier, S("vowel")), true); */
+/* } */
 
-func Void test_parser_3(Void) {
-	dictator_Parser parser = {0};
-	dictator_BufferNode bufferNode = {0};
-	static Char buffer[] =
-		"rule \"p\" -> \"b\" when vowel _ vowel\n"
-		"rule \"t\" -> \"d\" when vowel _ vowel\n"
-		"rule \"k\" -> \"g\" when vowel _ vowel"
-		;
-	dictator_tokenizer_init(&parser.tokenizer, S(buffer));
-	dictator_tryParseBuffer(&parser, &bufferNode);
-	TEST_EQ(bufferNode.len, 3);
-	test_parser_3_helper(&bufferNode.items[0], S("p"), S("b"));
-	test_parser_3_helper(&bufferNode.items[1], S("t"), S("d"));
-	test_parser_3_helper(&bufferNode.items[2], S("k"), S("g"));
-}
+/* func Void test_parser_3(Void) { */
+/* 	dictator_Parser parser = {0}; */
+/* 	dictator_BufferNode bufferNode = {0}; */
+/* 	static Char buffer[] = */
+/* 		"rule \"p\" -> \"b\" when vowel _ vowel\n" */
+/* 		"rule \"t\" -> \"d\" when vowel _ vowel\n" */
+/* 		"rule \"k\" -> \"g\" when vowel _ vowel" */
+/* 		; */
+/* 	dictator_tokenizer_init(&parser.tokenizer, S(buffer)); */
+/* 	dictator_tryParseBuffer(&parser, &bufferNode); */
+/* 	TEST_EQ(bufferNode.len, 3); */
+/* 	test_parser_3_helper(&bufferNode.items[0], S("p"), S("b")); */
+/* 	test_parser_3_helper(&bufferNode.items[1], S("t"), S("d")); */
+/* 	test_parser_3_helper(&bufferNode.items[2], S("k"), S("g")); */
+/* } */
 
-struct dictator_Slice {
+/* Void getMatches(dictator_Pattern *pattern, String8 buffer, dictator_Slices *matches) { */
+/* 	for */
+/* } */
+
+/* Void substitute(dictator_bufferNode *bnode, String8 buffer) { */
+/* 	Usize ruleIndex = 0; */
+/* 	for (ruleIndex = 0; ruleIndex < bnode->len; ruleIndex += 1) { */
+
+/* 	} */
+/* } */
+
+struct dictator_Match {
 	Usize index;
 	Usize len;
 };
 
-struct dictator_Slices {
-	dictator_Slice *items;
+func dictator_Match dictator_match(Usize index, Usize len) {
+	struct dictator_Match match = {0};
+	match.index = index;
+	match.len = len;
+	return match;
+}
+
+struct dictator_Matches {
+	dictator_Match *items;
 	Usize len;
 	Usize capacity;
 };
 
-struct dictator_Substituter {
-	DynamicArray(dictator_Rule) rules;
-	DynamicArray(dictator_Variable) variables;
-};
-
-Void getMatches(dictator_PatternNode *pattern, String8 buffer, dictator_Slices *matches) {
-	for
+/* maybe change replacer to Environment */
+func Bool dictator_doesMatch(const dictator_Replacer *replacer, const dictator_Pattern *pattern, const String8 buffer, Usize index, Usize *len) {
+	UNUSED(replacer);
+	UNUSED(pattern);
+	UNUSED(buffer);
+	UNUSED(index);
+	UNUSED(len);
+	switch (pattern->kind) {
+	case dictator_PatternKind_String: {
+		/* printf("{%.*s} {%.*s}\n", Slens(pattern->as.string), Slens(strSlice(buffer, index, pattern->as.string.len))); */
+		if (pattern->as.string.len <= buffer.len - index) {
+			if (strEq(pattern->as.string, strSlice(buffer, index, pattern->as.string.len))) {
+				*len = pattern->as.string.len;
+				return true;
+			}
+		}
+		return false;
+	} break;
+	case dictator_PatternKind_Identifier: {
+		assert(0);
+	} break;
+	case dictator_PatternKind_SmallInteger: {
+		assert(0);
+	} break;
+	case dictator_PatternKind_Or: {
+		assert(0);
+	} break;
+	case dictator_PatternKind_Concatenation: {
+		assert(0);
+	} break;
+	case dictator_PatternKind_List: {
+		assert(0);
+	} break;
+	}
+	assert(0);
 }
 
-Void substitute(dictator_bufferNode *bnode, String8 buffer) {
-	Usize ruleIndex = 0;
-	for (ruleIndex = 0; ruleIndex < bnode->len; ruleIndex += 1) {
+func Void dictator_getMatches(const dictator_Replacer *replacer, const dictator_Rule *rule, const String8 buffer, dictator_Matches *matches) {
+	/* this probably kinda sucks */
+	Usize index = 0, len = 0;
+	memZero(matches, sizeof(*matches));
+	for (index = 0; index < buffer.len; index += 1) {
+		len = 0;
+		if (rule->hasWhen) {
+			Usize whenIndex = 0;
+			Usize totalLen = 0;
+			Usize currentLen = 0;
+			Usize added = 0;
+			assert(rule->when.kind == dictator_PatternKind_Concatenation);
+			for (whenIndex = 0; whenIndex < rule->when.as.concatenation.len; whenIndex += 1) {
+				const dictator_Pattern *pattern = &rule->when.as.concatenation.items[whenIndex];
+				Bool isMain = false;
+				if (
+					pattern->kind == dictator_PatternKind_Identifier &&
+					strEq(pattern->as.identifier, S("_"))
+				) {
+					isMain = true;
+					pattern = &rule->before;
+				}
 
+				if (dictator_doesMatch(replacer, pattern, buffer, index + totalLen, &currentLen)) {
+					if (isMain) {
+						added += 1;
+						da_append(matches, dictator_match(index + totalLen, currentLen));
+					}
+					totalLen += currentLen;
+				} else {
+					/* THIS IS VERY IMPORTANT!!! */
+					/* we add the main matches even though we're not sure they're actually there
+					   we remove them later with in the next line, make sure it never exits the
+					   loop in any other way than the break in this body and the while condition
+					   not being satisfied in the inner for statement */
+					matches->len -= added;
+					break;
+				}
+			}
+		} else {
+			if (dictator_doesMatch(replacer, &rule->before, buffer, index, &len)) {
+				da_append(matches, dictator_match(index, len));
+			}
+		}
 	}
 }
 
-func Int main() {
+Int main() {
+	dictator_Parser parser = {0};
+	dictator_Replacer replacer = {0};
+
 	test_tokenizer();
 	test_parser();
-	printf("    done :)\n");
+
+	dictator_tokenizer_init(&parser.tokenizer, S("rule \"p\" -> \"b\" when \"a\" _ \"e\""));
+	assert(dictator_tryParseReplacer(&parser, &replacer) == 0);
+	{
+		String8 buffer = S("papepapepapo");
+		dictator_Matches matches = {0};
+		Usize ruleIndex = 0;
+		Usize matchIndex = 0;
+		for (ruleIndex = 0; ruleIndex < replacer.rules.len; ruleIndex += 1) {
+			dictator_getMatches(&replacer, &replacer.rules.items[ruleIndex], buffer, &matches);
+		}
+		printf("matches.len: %ld\n", matches.len);
+		for (matchIndex = 0; matchIndex < matches.len; matchIndex += 1) {
+			printf(
+				"(match :index %ld :len %ld)\n",
+				matches.items[matchIndex].index,
+				matches.items[matchIndex].len
+			);
+		}
+	}
+
 	return 0;
 }
