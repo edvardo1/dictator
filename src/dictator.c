@@ -325,11 +325,11 @@ func Bool charIsAlphanumeric(Char c) {
 }
 
 func Bool charIsIdentifierStart(Char c) {
-	return charIsAlpha(c) || c == '_';
+	return charIsAlpha(c) || c == '_' || c == '#';
 }
 
 func Bool charIsIdentifierAfterStart(Char c) {
-	return charIsAlpha(c) || c == '_' || charIsDigit(c);
+	return charIsAlpha(c) || c == '_' || c == '#' || charIsDigit(c);
 }
 
 func dictator_TokenizerCode dictator_tokenizer_popToken(dictator_Tokenizer *tokenizer, dictator_Token *token) {
@@ -1141,6 +1141,14 @@ func Bool dictator_doesMatch(const dictator_Replacer *replacer, const dictator_P
 		return false;
 	} break;
 	case dictator_PatternKind_Identifier: {
+		if (strEq(pattern->as.identifier, S("#"))) {
+			if (index == 0 || charIsWhitespace(buffer.buf[index])) {
+				*len = 0;
+				return true;
+			} else {
+				return false;
+			}
+		}
 		assert(0);
 	} break;
 	case dictator_PatternKind_SmallInteger: {
@@ -1206,7 +1214,9 @@ func Void dictator_getMatches(const dictator_Replacer *replacer, const dictator_
 			}
 		} else {
 			if (dictator_doesMatch(replacer, &rule->before, buffer, index, &len)) {
-				da_append(matches, dictator_match(index, len));
+				if (len > 0) {
+					da_append(matches, dictator_match(index, len));
+				}
 			}
 		}
 	}

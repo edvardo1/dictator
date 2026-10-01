@@ -5,28 +5,25 @@ define consonant =
 	"n" or "l" or "r" or "h" or
 	"s"
 
-rule "s" -> "" when _ "
-"
-rule "m" -> "" when _ "
-"
+rule "s" or "m" -> "" when _ #
 
+-- rule ["ā", "ē", "ī", "ō", "ū"] -> ["a", "e", "i", "o", "u"]
 rule "ā" -> "a"
 rule "ē" -> "e"
 rule "ī" -> "i"
 rule "ō" -> "o"
 rule "ū" -> "u"
 
-rule "e" -> "" when vowel "r" _ "
-"
-
+rule "e" -> "" when vowel "r" _ #
 rule "i" -> "j" when _ vowel
+
+-- rule ["p", "t", "k"] -> ["b", "d", "g"] when vowel _ vowel
 rule "p" -> "b" when vowel _ vowel
 rule "t" -> "d" when vowel _ vowel
 rule "c" -> "g" when vowel _ vowel
 
 rule "v" -> "" when vowel _ vowel
-rule "u" -> "o" when _ "
-"
+rule "u" -> "o" when _ #
 rule "gn" -> "nh"
 rule "c" -> "i" when "i" or "e" _ "t"
 rule "c" -> "u" when "o" or "u" _ "t"
