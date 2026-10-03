@@ -858,7 +858,7 @@ struct dictator_Replacer {
 	DynamicArray(dictator_Definition) definitions;
 };
 
-Int dictator_tryParsePatternPrimary(dictator_Parser *parser, dictator_Pattern *pattern) {
+func Int dictator_tryParsePatternPrimary(dictator_Parser *parser, dictator_Pattern *pattern) {
 	dictator_Token token = {0};
 	memZero(pattern, sizeof(*pattern));
 
@@ -875,6 +875,12 @@ Int dictator_tryParsePatternPrimary(dictator_Parser *parser, dictator_Pattern *p
 	} else if (token.kind == dictator_TokenKind_SmallInteger) {
 		pattern->kind = dictator_PatternKind_SmallInteger;
 		pattern->as.smallInteger = token.as.smallInteger;
+	} else if (token.kind == dictator_TokenKind_Parenthesis_Open) {
+		assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+		dictator_tryParsePattern(parser, pattern);
+		assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+		assert(token.kind == dictator_TokenKind_Parenthesis_Close);
+		return 0;
 	} else {
 		return 1;
 	}
@@ -884,7 +890,7 @@ Int dictator_tryParsePatternPrimary(dictator_Parser *parser, dictator_Pattern *p
 	return 0;
 }
 
-Int dictator_tryParsePatternOr(dictator_Parser *parser, dictator_Pattern *pattern) {
+func Int dictator_tryParsePatternOr(dictator_Parser *parser, dictator_Pattern *pattern) {
 	dictator_Token token = {0};
 	memZero(pattern, sizeof(*pattern));
 	dictator_Pattern individualPattern = {0};
@@ -917,7 +923,7 @@ Int dictator_tryParsePatternOr(dictator_Parser *parser, dictator_Pattern *patter
 	return 0;
 }
 
-Int dictator_tryParsePatternConcat(dictator_Parser *parser, dictator_Pattern *pattern) {
+func Int dictator_tryParsePatternConcat(dictator_Parser *parser, dictator_Pattern *pattern) {
 	memZero(pattern, sizeof(*pattern));
 	dictator_Pattern firstPattern = {0};
 	dictator_Pattern individualPattern = {0};
@@ -942,9 +948,11 @@ Int dictator_tryParsePatternConcat(dictator_Parser *parser, dictator_Pattern *pa
 	}
 }
 
-#define dictator_tryParsePattern dictator_tryParsePatternConcat
+func Int dictator_tryParsePattern(dictator_Parser *parser, dictator_Pattern *pattern) {
+	return dictator_tryParsePatternConcat(parser, pattern);
+}
 
-Int dictator_tryParseRule(dictator_Parser *parser, dictator_Rule *rule) {
+func Int dictator_tryParseRule(dictator_Parser *parser, dictator_Rule *rule) {
 	dictator_Token token = {0};
 	memZero(rule, sizeof(*rule));
 	if (dictator_tokenizer_peekToken(&parser->tokenizer, &token) != dictator_TokenizerCode_Ok) {
@@ -973,7 +981,7 @@ Int dictator_tryParseRule(dictator_Parser *parser, dictator_Rule *rule) {
 	return 0;
 }
 
-Int dictator_tryParseDefinition(dictator_Parser *parser, dictator_Definition *var) {
+func Int dictator_tryParseDefinition(dictator_Parser *parser, dictator_Definition *var) {
 	dictator_Token token = {0};
 	memZero(var, sizeof(*var));
 	if (dictator_tokenizer_peekToken(&parser->tokenizer, &token) != dictator_TokenizerCode_Ok) {
@@ -1006,6 +1014,10 @@ func Int dictator_tryParseReplacer(dictator_Parser *parser, dictator_Replacer *s
 		} else if (dictator_tryParseDefinition(parser, &definition) == 0) {
 			da_append(&substituter->definitions, definition);
 		} else {
+			if (parser->tokenizer.index < parser->tokenizer.string.len) {
+				printf("error at index: %d\n", parser->tokenizer.index);
+				exit(1);
+			}
 			break;
 		}
 	}
@@ -1142,14 +1154,18 @@ func Bool dictator_doesMatch(const dictator_Replacer *replacer, const dictator_P
 	} break;
 	case dictator_PatternKind_Identifier: {
 		if (strEq(pattern->as.identifier, S("#"))) {
-			if (index == 0 || charIsWhitespace(buffer.buf[index])) {
+			if (index == 0) {
 				*len = 0;
+				return true;
+			} else if (charIsWhitespace(buffer.buf[index])) {
+				*len = 1;
 				return true;
 			} else {
 				return false;
 			}
 		}
-		assert(0);
+		printf("error: unknown identiifer \"%.*s\"\n", Slens(pattern->as.identifier));
+		exit(1);
 	} break;
 	case dictator_PatternKind_SmallInteger: {
 		assert(0);
@@ -1379,11 +1395,17 @@ func Void slurpFile(String8 filepath, String8 *out) {
 	}
 }
 
+func Void showFormat() {
+	printf("format:\n");
+	printf("  dictator -r rules.dictator -t text.txt\n");
+}
+
 func Int main(Int argc, Char **argv) {
 	dictator_Parser parser = {0};
 	dictator_Replacer replacer = {0};
 	String8 rulesSource = {0}, textSource = {0};
 	String8 rulesBuffer = {0}, textBuffer = {0};
+	Bool providedRules = false, providedText = false;
 
 	test_tokenizer();
 	test_parser();
@@ -1392,18 +1414,50 @@ func Int main(Int argc, Char **argv) {
 	argv += 1;
 	while (argc > 0) {
 		if (strcmp(*argv, "-r") == 0) {
-			assert(argc > 1);
+			if (providedRules) {
+				printf("error: tried to provide more than 1 rule file\n");
+				showFormat();
+				return 1;
+			}
+			if (argc <= 0) {
+				printf("error: missing rule file argument\n");
+				showFormat();
+				return 1;
+			}
 			argc -= 1;
 			argv += 1;
 			rulesSource = string8FromCstr(*argv, strlen(*argv));
+			providedRules = true;
 		} else if (strcmp(*argv, "-t") == 0) {
-			assert(argc != 0);
+			if (providedText) {
+				printf("error: tried to provide more than 1 text file\n");
+				showFormat();
+				return 1;
+			}
+			if (argc <= 0) {
+				printf("error: missing text file argument\n");
+				showFormat();
+				return 1;
+			}
 			argc -= 1;
 			argv += 1;
 			textSource = string8FromCstr(*argv, strlen(*argv));
+			providedText = true;
 		}
 		argc -= 1;
 		argv += 1;
+	}
+
+	if (!providedRules) {
+		printf("error: no rules file provided\n");
+		showFormat();
+		return 1;
+	}
+
+	if (!providedText) {
+		printf("error: no text file provided\n");
+		showFormat();
+		return 1;
 	}
 
 	assert(rulesSource.len != 0);
@@ -1411,9 +1465,6 @@ func Int main(Int argc, Char **argv) {
 
 	slurpFile(rulesSource, &rulesBuffer);
 	slurpFile(textSource, &textBuffer);
-
-	printf("rules: %.*s\n", Slens(rulesBuffer));
-	printf("text: %.*s\n", Slens(textBuffer));
 
 	dictator_tokenizer_init(&parser.tokenizer, rulesBuffer);
 	assert(dictator_tryParseReplacer(&parser, &replacer) == 0);
@@ -1426,7 +1477,7 @@ func Int main(Int argc, Char **argv) {
 			dictator_applyRule(&replacer, &replacer.rules.items[ruleIndex], buffer, &newBuffer);
 			buffer = newBuffer;
 		}
-		printf("%.*s\n", Slens(buffer));
+		printf("%.*s", Slens(buffer));
 	}
 
 	return 0;
