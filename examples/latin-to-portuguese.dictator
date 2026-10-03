@@ -1,9 +1,9 @@
 define vowel = "a" or "e" or "i" or "o" or "u"
 define consonant =
-	"p" or "t" or "c" or "q" or
+	"p" or "t" or "k" or "q" or
 	"b" or "d" or "g" or "m" or
 	"n" or "l" or "r" or "h" or
-	"s"
+	"s" or "c"
 
 rule "s" or "m" -> "" when _ #
 
@@ -17,18 +17,24 @@ rule "ū" -> "u"
 rule "e" -> "" when vowel "r" _ #
 rule "i" -> "j" when _ vowel
 
+-- rule "k" -> "ts" -> "c" when _ "e" or "i"
+rule "j" -> "dʒ" when # _
+rule "dʒ" -> "ʒ"
+
 -- rule ["p", "t", "k"] -> ["b", "d", "g"] when vowel _ vowel
 rule "p" -> "b" when vowel _ vowel
 rule "t" -> "d" when vowel _ vowel
-rule "c" -> "g" when vowel _ vowel
+rule "k" -> "g" when vowel _ vowel
+
+-- rule "k" -> "ts" -> "c" when _ "e" or "i"
+rule "k" -> "ts" when _ "e" or "i"
+rule "ts" -> "s"
 
 rule "v" -> "" when vowel _ vowel
 rule "u" -> "o" when _ #
 rule "gn" -> "nh"
-rule "c" -> "i" when "i" or "e" _ "t"
-rule "c" -> "u" when "o" or "u" _ "t"
+rule "k" -> "i" when "i" or "e" _ "t"
+rule "k" -> "u" when "o" or "u" _ "t"
 rule "p" -> "" when vowel _ "t"
 rule "ii" -> "i"
 rule "e" -> "" when consonant _ "r" vowel
-
-rule "lj" -> "lh" -- not an actual sound change
