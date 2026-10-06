@@ -1,0 +1,33 @@
+ws ::= " " | "\n" | "\t" | ws ws
+
+an id is a (([a-Z] or "_") +) except for "define", "rule", "or", "when"
+a string is tokenized like it's usually tokenized
+int ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | int+
+
+pattern' ::= pattern' ws "or" ws pattern'
+           | "(" pattern' ")"
+           | id
+           | string
+
+pattern ::= pattern'
+		  | pattern ws pattern
+
+lpattern ::= pattern
+           | "[" lpattern ("," lpattern)* "]"
+
+bpattern ::= lpattern
+           | bpattern ws bpattern
+           | "{" pattern "}"
+
+apattern ::= lpattern
+           | apattern ws apattern
+           | int
+
+wpattern ::= (pattern ws)? "_" (ws pattern)?
+
+definition ::= "define" ws id ws "=" ws pattern
+rule ::= "rule" ws bpattern ws "->" ws apattern (ws "when" ws wbpattern)?
+
+s = definition s
+  | rule s
+  | epsilon
