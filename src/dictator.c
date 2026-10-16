@@ -13,65 +13,19 @@ typedef enum {
 	dictator_TokenKind_String,
 	dictator_TokenKind_SmallInteger,
 
-	dictator_TokenKind_Ampersand,
-	dictator_TokenKind_AmpersandAmpersand,
 	dictator_TokenKind_ArrowRight,
-	dictator_TokenKind_Asterisk,
-	dictator_TokenKind_AsteriskEquals,
-	dictator_TokenKind_Colon,
 	dictator_TokenKind_Comma,
 	dictator_TokenKind_CurlyBracket_Close,
 	dictator_TokenKind_CurlyBracket_Open,
-	dictator_TokenKind_Dot,
 	dictator_TokenKind_Equals,
-	dictator_TokenKind_EqualsEquals,
-	dictator_TokenKind_ExclamationMark,
-	dictator_TokenKind_ExclamationMarkEquals,
-	dictator_TokenKind_Hat,
-	dictator_TokenKind_HatEquals,
-	dictator_TokenKind_LeftArrow,
-	dictator_TokenKind_LeftArrowEquals,
-	dictator_TokenKind_LeftArrowLeftArrow,
-	dictator_TokenKind_LeftArrowLeftArrowEquals,
-	dictator_TokenKind_Minus,
-	dictator_TokenKind_MinusEquals,
 	dictator_TokenKind_Parenthesis_Close,
 	dictator_TokenKind_Parenthesis_Open,
-	dictator_TokenKind_Percent,
-	dictator_TokenKind_PercentEquals,
-	dictator_TokenKind_Pipe,
-	dictator_TokenKind_PipePipe,
-	dictator_TokenKind_Plus,
-	dictator_TokenKind_PlusEquals,
-	dictator_TokenKind_QuestionMark,
-	dictator_TokenKind_RightArrow,
-	dictator_TokenKind_RightArrowEquals,
-	dictator_TokenKind_RightArrowRightArrow,
-	dictator_TokenKind_RightArrowRightArrowEquals,
-	dictator_TokenKind_Semicolon,
-	dictator_TokenKind_Slash,
-	dictator_TokenKind_SlashEquals,
 	dictator_TokenKind_SquareBracket_Close,
 	dictator_TokenKind_SquareBracket_Open,
-	dictator_TokenKind_Tilde,
-	dictator_TokenKind_Assert,
-	dictator_TokenKind_Break,
-	dictator_TokenKind_Case,
-	dictator_TokenKind_Default,
 	dictator_TokenKind_Define,
-	dictator_TokenKind_Else,
-	dictator_TokenKind_Enum,
-	dictator_TokenKind_Fn,
-	dictator_TokenKind_For,
-	dictator_TokenKind_If,
 	dictator_TokenKind_Or,
-	dictator_TokenKind_Panic,
-	dictator_TokenKind_Return,
 	dictator_TokenKind_Rule,
-	dictator_TokenKind_Struct,
-	dictator_TokenKind_Union,
 	dictator_TokenKind_When,
-	dictator_TokenKind_While,
 
 	dictator_TokenKind_COUNT
 } dictator_TokenKind;
@@ -84,6 +38,29 @@ typedef enum {
 
 #include "dictator.h"
 #define func
+
+struct StringBuilder {
+	String8 *items;
+	Usize len;
+	Usize capacity;
+};
+
+func Void stringBuilder_build(StringBuilder *sb, String8 *out) {
+	Usize totalLen = 0, i = 0;
+	for (i = 0; i < sb->len; i += 1) {
+		totalLen += sb->items[i].len;
+	}
+	out->buf = malloc(totalLen);
+	out->len = 0;
+	i = 0;
+	while (out->len < totalLen) {
+		memcpy(&out->buf[out->len], sb->items[i].buf, sb->items[i].len);
+		assert(i < sb->len);
+		out->len += sb->items[i].len;
+		i += 1;
+	}
+	assert(out->len == totalLen);
+}
 
 struct dictator_Token {
 	dictator_TokenKind kind;
@@ -156,104 +133,23 @@ func Void dictator_token_print(dictator_Token *token) {
 	case dictator_TokenKind_CurlyBracket_Close: {
 		printf("CurlyBracket_Close\n");
 	} break;
-	case dictator_TokenKind_Semicolon: {
-		printf("Semicolon\n");
-	} break;
-	case dictator_TokenKind_Slash: {
-		printf("Slash\n");
-	} break;
-	case dictator_TokenKind_SlashEquals: {
-		printf("SlashEquals\n");
-	} break;
-	case dictator_TokenKind_Colon: {
-		printf("Colon\n");
-	} break;
-	case dictator_TokenKind_Dot: {
-		printf("Dot\n");
-	} break;
 	case dictator_TokenKind_Comma: {
 		printf("Comma\n");
-	} break;
-	case dictator_TokenKind_Ampersand: {
-		printf("Ampersand\n");
-	} break;
-	case dictator_TokenKind_AmpersandAmpersand: {
-		printf("AmpersandAmpersand\n");
 	} break;
 	case dictator_TokenKind_ArrowRight: {
 		printf("ArrowRight\n");
 	} break;
-	case dictator_TokenKind_Pipe: {
-		printf("Pipe\n");
-	} break;
-	case dictator_TokenKind_PipePipe: {
-		printf("PipePipe\n");
-	} break;
-	case dictator_TokenKind_LeftArrow: {
-		printf("LeftArrow\n");
-	} break;
-	case dictator_TokenKind_LeftArrowLeftArrow: {
-		printf("LeftArrowLeftArrow\n");
-	} break;
-	case dictator_TokenKind_RightArrow: {
-		printf("RightArrow\n");
-	} break;
-	case dictator_TokenKind_RightArrowRightArrow: {
-		printf("RightArrowRightArrow\n");
-	} break;
-	case dictator_TokenKind_Assert: {
-		printf("Assert\n");
-	} break;
-	case dictator_TokenKind_Break: {
-		printf("Break\n");
-	} break;
-	case dictator_TokenKind_Case: {
-		printf("Case\n");
-	} break;
-	case dictator_TokenKind_Default: {
-		printf("Default\n");
-	} break;
 	case dictator_TokenKind_Define: {
 		printf("Define\n");
-	} break;
-	case dictator_TokenKind_Else: {
-		printf("Else\n");
-	} break;
-	case dictator_TokenKind_Enum: {
-		printf("Enum\n");
-	} break;
-	case dictator_TokenKind_Fn: {
-		printf("Fn\n");
-	} break;
-	case dictator_TokenKind_For: {
-		printf("For\n");
-	} break;
-	case dictator_TokenKind_If: {
-		printf("If\n");
 	} break;
 	case dictator_TokenKind_Or: {
 		printf("Or\n");
 	} break;
-	case dictator_TokenKind_Panic: {
-		printf("Panic\n");
-	} break;
-	case dictator_TokenKind_Return: {
-		printf("Return\n");
-	} break;
 	case dictator_TokenKind_Rule: {
 		printf("Rule\n");
 	} break;
-	case dictator_TokenKind_Struct: {
-		printf("Struct\n");
-	} break;
-	case dictator_TokenKind_Union: {
-		printf("Union\n");
-	} break;
 	case dictator_TokenKind_When: {
 		printf("When\n");
-	} break;
-	case dictator_TokenKind_While: {
-		printf("While\n");
 	} break;
 	default: {
 		printf("Unknown Token\n");
@@ -370,36 +266,26 @@ commentLabel:
 
 	err = dictator_tokenizer__peekChar(tokenizer, &c);
 	if (err == 0) {
-		if (c == '&') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Ampersand;
-			if (dictator_tokenizer__peekChar(tokenizer, &c) == 0 && c == '=') {
-				tokenizer->token.kind = dictator_TokenKind_AmpersandAmpersand;
-			}
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == '*') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Asterisk;
-			if (dictator_tokenizer__peekChar(tokenizer, &c) == 0 && c == '=') {
-				tokenizer->token.kind = dictator_TokenKind_AsteriskEquals;
-			}
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == ':') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Colon;
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == ',') {
+		if (c == ',') {
 			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
 			tokenizer->token.kind = dictator_TokenKind_Comma;
+			if (token != NULL) {
+				*token = tokenizer->token;
+			}
+			return 0;
+		} else if (c == '-') {
+			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
+			if (dictator_tokenizer__peekChar(tokenizer, &c) == 0) {
+				if (c == '>') {
+					tokenizer->token.kind = dictator_TokenKind_ArrowRight;
+					assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
+				} else if (c == '-') {
+					inComment = true;
+					goto commentLabel;
+				} else {
+					assert(0);
+				}
+			}
 			if (token != NULL) {
 				*token = tokenizer->token;
 			}
@@ -418,61 +304,9 @@ commentLabel:
 				*token = tokenizer->token;
 			}
 			return 0;
-		} else if (c == '.') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Dot;
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
 		} else if (c == '=') {
 			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
 			tokenizer->token.kind = dictator_TokenKind_Equals;
-			if (dictator_tokenizer__peekChar(tokenizer, &c) == 0 && c == '=') {
-				tokenizer->token.kind = dictator_TokenKind_EqualsEquals;
-			}
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == '!') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_ExclamationMark;
-			if (dictator_tokenizer__peekChar(tokenizer, &c) == 0 && c == '=') {
-				tokenizer->token.kind = dictator_TokenKind_ExclamationMarkEquals;
-			}
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == '^') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Hat;
-			if (dictator_tokenizer__peekChar(tokenizer, &c) == 0 && c == '=') {
-				tokenizer->token.kind = dictator_TokenKind_HatEquals;
-				assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			}
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == '<') {
-			assert(0);
-		} else if (c == '-') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Minus;
-			if (dictator_tokenizer__peekChar(tokenizer, &c) == 0) {
-				if (c == '=') {
-					tokenizer->token.kind = dictator_TokenKind_MinusEquals;
-					assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-				} else if (c == '>') {
-					tokenizer->token.kind = dictator_TokenKind_ArrowRight;
-					assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-				} else if (c == '-') {
-					inComment = true;
-					goto commentLabel;
-				}
-			}
 			if (token != NULL) {
 				*token = tokenizer->token;
 			}
@@ -491,58 +325,6 @@ commentLabel:
 				*token = tokenizer->token;
 			}
 			return 0;
-		} else if (c == '%') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Percent;
-			if (dictator_tokenizer__peekChar(tokenizer, &c) == 0 && c == '=') {
-				tokenizer->token.kind = dictator_TokenKind_PercentEquals;
-			}
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == '|') {
-			assert(0);
-		} else if (c == '+') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Plus;
-			if (dictator_tokenizer__peekChar(tokenizer, &c) == 0 && c == '=') {
-				tokenizer->token.kind = dictator_TokenKind_PlusEquals;
-				assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			}
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == '?') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_QuestionMark;
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == '<') {
-			assert(0);
-		} else if (c == '>') {
-			assert(0);
-		} else if (c == ';') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Semicolon;
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == '/') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Slash;
-			if (dictator_tokenizer__peekChar(tokenizer, &c) == 0 && c == '=') {
-				tokenizer->token.kind = dictator_TokenKind_SlashEquals;
-				assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			}
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
 		} else if (c == ']') {
 			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
 			tokenizer->token.kind = dictator_TokenKind_SquareBracket_Close;
@@ -553,13 +335,6 @@ commentLabel:
 		} else if (c == '[') {
 			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
 			tokenizer->token.kind = dictator_TokenKind_SquareBracket_Open;
-			if (token != NULL) {
-				*token = tokenizer->token;
-			}
-			return 0;
-		} else if (c == '~') {
-			assert(dictator_tokenizer__advanceChar(tokenizer) == 0);
-			tokenizer->token.kind = dictator_TokenKind_Tilde;
 			if (token != NULL) {
 				*token = tokenizer->token;
 			}
@@ -617,40 +392,12 @@ commentLabel:
 								&tokenizer->string.buf[initialIndex];
 							tokenizer->token.as.identifier.string.len = stringLen;
 
-							if (strEq(tokenizer->token.as.identifier.string, S("assert"))) {
-								tokenizer->token.kind = dictator_TokenKind_Assert;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("break"))) {
-								tokenizer->token.kind = dictator_TokenKind_Break;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("case"))) {
-								tokenizer->token.kind = dictator_TokenKind_Case;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("default"))) {
-								tokenizer->token.kind = dictator_TokenKind_Default;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("define"))) {
+							if (strEq(tokenizer->token.as.identifier.string, S("define"))) {
 								tokenizer->token.kind = dictator_TokenKind_Define;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("else"))) {
-								tokenizer->token.kind = dictator_TokenKind_Else;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("enum"))) {
-								tokenizer->token.kind = dictator_TokenKind_Enum;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("fn"))) {
-								tokenizer->token.kind = dictator_TokenKind_Fn;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("for"))) {
-								tokenizer->token.kind = dictator_TokenKind_For;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("if"))) {
-								tokenizer->token.kind = dictator_TokenKind_If;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("or"))) {
 								tokenizer->token.kind = dictator_TokenKind_Or;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("panic"))) {
-								tokenizer->token.kind = dictator_TokenKind_Panic;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("return"))) {
-								tokenizer->token.kind = dictator_TokenKind_Return;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("rule"))) {
 								tokenizer->token.kind = dictator_TokenKind_Rule;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("struct"))) {
-								tokenizer->token.kind = dictator_TokenKind_Struct;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("union"))) {
-								tokenizer->token.kind = dictator_TokenKind_Union;
-							} else if (strEq(tokenizer->token.as.identifier.string, S("while"))) {
-								tokenizer->token.kind = dictator_TokenKind_While;
 							} else if (strEq(tokenizer->token.as.identifier.string, S("when"))) {
 								tokenizer->token.kind = dictator_TokenKind_When;
 							}
@@ -678,94 +425,6 @@ func dictator_TokenizerCode dictator_tokenizer_peekToken(dictator_Tokenizer *tok
 		tokenizer->hasToken = true;
 	}
 	return err;
-}
-
-func Void test_tokenizer(Void) {
-	test_tokenizer_0();
-	test_tokenizer_1();
-}
-
-func Void test_tokenizer_0(Void) {
-	dictator_Tokenizer tokenizer = {0};
-	dictator_tokenizer_init(&tokenizer, S("fn swap(a: [&]Int, b: &Int) {;}"));
-	dictator_Token token = {0};
-#define TEST_EQ(a, b) \
-do { \
-	if ((a) != (b)) { \
-		printf("FAILED EQ: <<%s>> != <<%s>>\n", #a, #b); \
-		assert(a == b); \
-	} \
-} while (0)
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Fn);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Identifier);
-	TEST_EQ(strEq(token.as.identifier.string, S("swap")), true);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Parenthesis_Open);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Identifier);
-	TEST_EQ(strEq(token.as.identifier.string, S("a")), true);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Colon);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_SquareBracket_Open);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Ampersand);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_SquareBracket_Close);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Identifier);
-	TEST_EQ(strEq(token.as.identifier.string, S("Int")), true);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Comma);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Identifier);
-	TEST_EQ(strEq(token.as.identifier.string, S("b")), true);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Colon);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Ampersand);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Identifier);
-	TEST_EQ(strEq(token.as.identifier.string, S("Int")), true);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Parenthesis_Close);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_CurlyBracket_Open);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Semicolon);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_CurlyBracket_Close);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Over);
-}
-
-func Void test_tokenizer_1(Void) {
-	dictator_Tokenizer tokenizer = {0};
-	dictator_tokenizer_init(&tokenizer, S("rule \"p\" -> \"b\" when vowel _ vowel"));
-	dictator_Token token = {0};
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Rule);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_String);
-	TEST_EQ(strEq(token.as.string.string, S("p")), true);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_ArrowRight);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_String);
-	TEST_EQ(strEq(token.as.string.string, S("b")), true);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_When);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Identifier);
-	TEST_EQ(strEq(token.as.identifier.string, S("vowel")), true);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Identifier);
-	TEST_EQ(strEq(token.as.identifier.string, S("_")), true);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Ok);
-	TEST_EQ(token.kind, dictator_TokenKind_Identifier);
-	TEST_EQ(strEq(token.as.identifier.string, S("vowel")), true);
-	TEST_EQ(dictator_tokenizer_popToken(&tokenizer, &token), dictator_TokenizerCode_Over);
 }
 
 typedef enum {
@@ -1055,92 +714,6 @@ func Int dictator_tryParseReplacer(dictator_Parser *parser, dictator_Replacer *s
 	return 0;
 }
 
-func Void test_parser(Void) {
-	test_parser_0();
-	/* test_parser_1(); */
-	/* test_parser_2(); */
-	/* test_parser_3(); */
-}
-
-func Void test_parser_0(Void) {
-	dictator_Parser parser = {0};
-	dictator_Pattern pattern = {0};
-	dictator_tokenizer_init(&parser.tokenizer, S("a \"p\" b"));
-	TEST_EQ(dictator_tryParsePattern(&parser, &pattern), 0);
-	TEST_EQ(pattern.kind, dictator_PatternKind_Concatenation);
-	TEST_EQ(pattern.as.concatenation.len, 3);
-	TEST_EQ(pattern.as.concatenation.items[0].kind, dictator_PatternKind_Identifier);
-	TEST_EQ(strEq(pattern.as.concatenation.items[0].as.identifier, S("a")), true);
-	TEST_EQ(pattern.as.concatenation.items[1].kind, dictator_PatternKind_String);
-	TEST_EQ(strEq(pattern.as.concatenation.items[1].as.string, S("p")), true);
-	TEST_EQ(pattern.as.concatenation.items[2].kind, dictator_PatternKind_Identifier);
-	TEST_EQ(strEq(pattern.as.concatenation.items[2].as.identifier, S("b")), true);
-}
-
-func Void test_parser_1(Void) {
-	dictator_Parser parser = {0};
-	dictator_Rule rule = {0};
-	dictator_tokenizer_init(&parser.tokenizer, S("rule \"p\" -> \"b\""));
-	TEST_EQ(dictator_tryParseRule(&parser, &rule), 0);
-	TEST_EQ(rule.before.kind, dictator_PatternKind_String);
-	TEST_EQ(strEq(rule.before.as.string, S("p")), true);
-	TEST_EQ(rule.after.kind, dictator_PatternKind_String);
-	TEST_EQ(strEq(rule.after.as.string, S("p")), true);
-	TEST_EQ(rule.hasWhen, false);
-}
-
-func Void test_parser_2(Void) {
-	dictator_Parser parser = {0};
-	dictator_Rule rule = {0};
-	dictator_tokenizer_init(&parser.tokenizer, S("rule \"p\" -> \"b\" when vowel _ consonant"));
-	TEST_EQ(dictator_tryParseRule(&parser, &rule), 0);
-	TEST_EQ(rule.before.kind, dictator_PatternKind_String);
-	TEST_EQ(strEq(rule.before.as.string, S("p")), true);
-	TEST_EQ(rule.after.kind, dictator_PatternKind_String);
-	TEST_EQ(strEq(rule.after.as.string, S("p")), true);
-	TEST_EQ(rule.hasWhen, true);
-	TEST_EQ(rule.when.kind, dictator_PatternKind_Concatenation);
-	TEST_EQ(rule.when.as.concatenation.len, 3);
-	TEST_EQ(rule.when.as.concatenation.items[0].kind, dictator_PatternKind_Identifier);
-	TEST_EQ(strEq(rule.when.as.concatenation.items[0].as.identifier, S("vowel")), true);
-	TEST_EQ(rule.when.as.concatenation.items[1].kind, dictator_PatternKind_Identifier);
-	TEST_EQ(strEq(rule.when.as.concatenation.items[1].as.identifier, S("_")), true);
-	TEST_EQ(rule.when.as.concatenation.items[2].kind, dictator_PatternKind_Identifier);
-	TEST_EQ(strEq(rule.when.as.concatenation.items[2].as.identifier, S("consonant")), true);
-}
-
-/* func Void test_parser_3_helper(dictator_TopNode *topNode, String8 before, String8 after) { */
-/* 	TEST_EQ(topNode->kind, dictator_TopNodeKind_Rule); */
-/* 	TEST_EQ(topNode->as.rule.before.len, 1); */
-/* 	TEST_EQ(topNode->as.rule.before.items[0].kind, dictator_PatternKind_String); */
-/* 	TEST_EQ(strEq(topNode->as.rule.before.items[0].as.string, before), true); */
-/* 	TEST_EQ(topNode->as.rule.after.len, 1); */
-/* 	TEST_EQ(topNode->as.rule.after.items[0].kind, dictator_PatternKind_String); */
-/* 	TEST_EQ(strEq(topNode->as.rule.after.items[0].as.string, after), true); */
-/* 	TEST_EQ(topNode->as.rule.when.items[0].kind, dictator_PatternKind_Identifier); */
-/* 	TEST_EQ(strEq(topNode->as.rule.when.items[0].as.identifier, S("vowel")), true); */
-/* 	TEST_EQ(topNode->as.rule.when.items[1].kind, dictator_PatternKind_Identifier); */
-/* 	TEST_EQ(strEq(topNode->as.rule.when.items[1].as.identifier, S("_")), true); */
-/* 	TEST_EQ(topNode->as.rule.when.items[2].kind, dictator_PatternKind_Identifier); */
-/* 	TEST_EQ(strEq(topNode->as.rule.when.items[2].as.identifier, S("vowel")), true); */
-/* } */
-
-/* func Void test_parser_3(Void) { */
-/* 	dictator_Parser parser = {0}; */
-/* 	dictator_BufferNode bufferNode = {0}; */
-/* 	static Char buffer[] = */
-/* 		"rule \"p\" -> \"b\" when vowel _ vowel\n" */
-/* 		"rule \"t\" -> \"d\" when vowel _ vowel\n" */
-/* 		"rule \"k\" -> \"g\" when vowel _ vowel" */
-/* 		; */
-/* 	dictator_tokenizer_init(&parser.tokenizer, S(buffer)); */
-/* 	dictator_tryParseBuffer(&parser, &bufferNode); */
-/* 	TEST_EQ(bufferNode.len, 3); */
-/* 	test_parser_3_helper(&bufferNode.items[0], S("p"), S("b")); */
-/* 	test_parser_3_helper(&bufferNode.items[1], S("t"), S("d")); */
-/* 	test_parser_3_helper(&bufferNode.items[2], S("k"), S("g")); */
-/* } */
-
 struct dictator_Match {
 	Usize index;
 	Usize len;
@@ -1289,12 +862,8 @@ func Void dictator_getMatches(const dictator_Replacer *replacer, const dictator_
 				if (dictator_getMatch(replacer, pattern, buffer, index + totalLen, &currentLen, &match)) {
 					if (isMain) {
 						added += 1;
-						/* da_append(matches, dictator_match(index + totalLen, currentLen)); */
 						da_append(matches, match);
 					}
-					/* if (listIndex != -1) { */
-					/* 	da_append(&matches->listIndices, listIndex); */
-					/* } */
 					totalLen += currentLen;
 				} else {
 					/* THIS IS VERY IMPORTANT!!! */
@@ -1312,37 +881,9 @@ func Void dictator_getMatches(const dictator_Replacer *replacer, const dictator_
 				if (len > 0) {
 					da_append(matches, match);
 				}
-				/* if (listIndex != -1) { */
-				/* 	da_append(&matches->listIndices, listIndex); */
-				/* } */
 			}
 		}
 	}
-}
-
-/* ([a, b, c] or [x, y, z]) d e -> [f, g, h] i j */
-
-struct StringBuilder {
-	String8 *items;
-	Usize len;
-	Usize capacity;
-};
-
-func Void stringBuilder_build(StringBuilder *sb, String8 *out) {
-	Usize totalLen = 0, i = 0;
-	for (i = 0; i < sb->len; i += 1) {
-		totalLen += sb->items[i].len;
-	}
-	out->buf = malloc(totalLen);
-	out->len = 0;
-	i = 0;
-	while (out->len < totalLen) {
-		memcpy(&out->buf[out->len], sb->items[i].buf, sb->items[i].len);
-		assert(i < sb->len);
-		out->len += sb->items[i].len;
-		i += 1;
-	}
-	assert(out->len == totalLen);
 }
 
 func Void dictator_addPatternToStringBuilder(const dictator_Match *match, Usize *listIndicesIndex, const dictator_Pattern *pattern, StringBuilder *sb) {
@@ -1366,47 +907,24 @@ func Void dictator_addPatternToStringBuilder(const dictator_Match *match, Usize 
 }
 
 func Void dictator_getReplacementString(const dictator_Matches *matches, Usize index, const dictator_Rule *rule, String8 *replacementString) {
-	/* Usize i = 0, j = 0; */
-	/* fprintf(stderr, "markedIndices: "); */
-	/* for (i = 0; i < matches->markedIndices.len; i += 1) { */
-	/* 	fprintf(stderr, "%d ", matches->markedIndices.items[i]); */
-	/* } */
-	/* fprintf(stderr, "\n"); */
-	/* fprintf(stderr, "matches:\n"); */
-	/* for (i = 0; i < matches->len; i += 1) { */
-	/* 	fprintf(stderr, "  %ld %ld", matches->items[i].index, matches->items[i].len); */
-	/* 	fprintf(stderr, "  listIndices: "); */
-	/* 	for (j = 0; j < matches->items[i].listIndices.len; j += 1) { */
-	/* 		fprintf(stderr, "%d ", matches->items[i].listIndices.items[j]); */
-	/* 	} */
-	/* 	fprintf(stderr, "\n"); */
-	/* } */
-	/* fprintf(stderr, "\n"); */
+	StringBuilder rbuf = {0};
+	const dictator_Pattern *plist = NULL;
+	Usize len = 0, i = 0, listIndicesIndex = 0;
+	const dictator_Match *match = &matches->items[index];
 
-	{
-		StringBuilder rbuf = {0};
-		const dictator_Pattern *plist = NULL;
-		Usize len = 0, i = 0, listIndicesIndex = 0;
-		const dictator_Match *match = &matches->items[index];
-
-		if (rule->after.kind == dictator_PatternKind_Concatenation) {
-			plist = rule->after.as.concatenation.items;
-			len   = rule->after.as.concatenation.len;
-		} else {
-			plist = &rule->after;
-			len = 1;
-		}
-
-		for (i = 0; i < len; i += 1) {
-			dictator_addPatternToStringBuilder(match, &listIndicesIndex, &plist[i], &rbuf);
-		}
-
-		stringBuilder_build(&rbuf, replacementString);
+	if (rule->after.kind == dictator_PatternKind_Concatenation) {
+		plist = rule->after.as.concatenation.items;
+		len   = rule->after.as.concatenation.len;
+	} else {
+		plist = &rule->after;
+		len = 1;
 	}
 
-	/* assert(rule->after.kind == dictator_PatternKind_String); */
-	/* replacementString->buf = rule->after.as.string.buf; */
-	/* replacementString->len = rule->after.as.string.len; */
+	for (i = 0; i < len; i += 1) {
+		dictator_addPatternToStringBuilder(match, &listIndicesIndex, &plist[i], &rbuf);
+	}
+
+	stringBuilder_build(&rbuf, replacementString);
 }
 
 func Void dictator_applyRule(const dictator_Replacer *replacer, const dictator_Rule *rule, const String8 buffer, String8 *newBuffer) {
@@ -1456,7 +974,11 @@ func Void dictator_applyRule(const dictator_Replacer *replacer, const dictator_R
 	newBuffer->buf = malloc(newLen);
 	newBuffer->len = 0;
 	for (builderIndex = 0; builderIndex < builder.len; builderIndex += 1) {
-		memcpy(&newBuffer->buf[newBuffer->len], builder.items[builderIndex].buf, builder.items[builderIndex].len);
+		memcpy(
+			&newBuffer->buf[newBuffer->len],
+			builder.items[builderIndex].buf,
+			builder.items[builderIndex].len
+		);
 		newBuffer->len += builder.items[builderIndex].len;
 	}
 	assert(newBuffer->len == newLen);
@@ -1592,9 +1114,6 @@ func Int main(Int argc, Char **argv) {
 	String8 rulesSource = {0}, textSource = {0};
 	String8 rulesBuffer = {0}, textBuffer = {0};
 	Bool providedRules = false, providedText = false;
-
-	test_tokenizer();
-	test_parser();
 
 	argc -= 1;
 	argv += 1;
