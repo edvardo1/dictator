@@ -790,51 +790,51 @@ struct dictator_Pattern {
 	} as;
 };
 
-func Void dictator_patternPrint(dictator_Pattern *atom) {
+func Void dictator_patternPrint(const dictator_Pattern *atom) {
 	Usize index = 0;
 	if (atom->marked) {
-		printf("$");
+		fprintf(stderr, "$");
 	}
-	printf("(");
+	fprintf(stderr, "(");
 	switch (atom->kind) {
 	case dictator_PatternKind_String: {
-		printf("string %.*s", Slens(atom->as.string));
+		fprintf(stderr, "string %.*s", Slens(atom->as.string));
 	} break;
 	case dictator_PatternKind_Identifier: {
-		printf("identifier %.*s", Slens(atom->as.identifier));
+		fprintf(stderr, "identifier %.*s", Slens(atom->as.identifier));
 	} break;
 	case dictator_PatternKind_SmallInteger: {
-		printf("small_integer %d", atom->as.smallInteger);
+		fprintf(stderr, "small_integer %d", atom->as.smallInteger);
 	} break;
 	case dictator_PatternKind_Or: {
-		printf("or ");
+		fprintf(stderr, "or ");
 		for (index = 0; index < atom->as.or.len; index += 1) {
 			if (index != 0) {
-				printf(" ");
+				fprintf(stderr, " ");
 			}
 			dictator_patternPrint(&atom->as.or.items[index]);
 		}
 	} break;
 	case dictator_PatternKind_List: {
-		printf("list ");
+		fprintf(stderr, "list ");
 		for (index = 0; index < atom->as.list.len; index += 1) {
 			if (index != 0) {
-				printf(" ");
+				fprintf(stderr, " ");
 			}
 			dictator_patternPrint(&atom->as.list.items[index]);
 		}
 	} break;
 	case dictator_PatternKind_Concatenation: {
-		printf("concatenation ");
+		fprintf(stderr, "concatenation ");
 		for (index = 0; index < atom->as.concatenation.len; index += 1) {
 			if (index != 0) {
-				printf(" ");
+				fprintf(stderr, " ");
 			}
 			dictator_patternPrint(&atom->as.concatenation.items[index]);
 		}
 	} break;
 	}
-	printf(")");
+	fprintf(stderr, ")");
 }
 
 struct dictator_Parser {
@@ -880,6 +880,36 @@ func Int dictator_tryParsePatternPrimary(dictator_Parser *parser, dictator_Patte
 		dictator_tryParsePattern(parser, pattern);
 		assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
 		assert(token.kind == dictator_TokenKind_Parenthesis_Close);
+		return 0;
+	} else if (token.kind == dictator_TokenKind_SquareBracket_Open) {
+		dictator_Pattern item = {0};
+		Bool needComma = false;
+		pattern->kind = dictator_PatternKind_List;
+		assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+
+		for (;;) {
+			assert(dictator_tokenizer_peekToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+			if (token.kind == dictator_TokenKind_SquareBracket_Close) {
+				assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+				break;
+			} else if (token.kind == dictator_TokenKind_Comma) {
+				needComma = false;
+				assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+			} else if (!needComma && dictator_tryParsePattern(parser, &item) == 0) {
+				da_append(&pattern->as.list, item);
+				needComma = true;
+			} else {
+				assert(0);
+			}
+		}
+
+		return 0;
+	} else if (token.kind == dictator_TokenKind_CurlyBracket_Open) {
+		assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+		dictator_tryParsePattern(parser, pattern);
+		assert(dictator_tokenizer_popToken(&parser->tokenizer, &token) == dictator_TokenizerCode_Ok);
+		pattern->marked = true;
+		assert(token.kind == dictator_TokenKind_CurlyBracket_Close);
 		return 0;
 	} else {
 		return 1;
@@ -1111,20 +1141,10 @@ func Void test_parser_2(Void) {
 /* 	test_parser_3_helper(&bufferNode.items[2], S("k"), S("g")); */
 /* } */
 
-/* Void getMatches(dictator_Pattern *pattern, String8 buffer, dictator_Slices *matches) { */
-/* 	for */
-/* } */
-
-/* Void substitute(dictator_bufferNode *bnode, String8 buffer) { */
-/* 	Usize ruleIndex = 0; */
-/* 	for (ruleIndex = 0; ruleIndex < bnode->len; ruleIndex += 1) { */
-
-/* 	} */
-/* } */
-
 struct dictator_Match {
 	Usize index;
 	Usize len;
+	DynamicArray(I32) listIndices;
 };
 
 func dictator_Match dictator_match(Usize index, Usize len) {
@@ -1138,15 +1158,22 @@ struct dictator_Matches {
 	dictator_Match *items;
 	Usize len;
 	Usize capacity;
+
+	DynamicArray(I32) markedIndices;
 };
 
 /* maybe change replacer to Environment */
-func Bool dictator_doesMatch(const dictator_Replacer *replacer, const dictator_Pattern *pattern, const String8 buffer, Usize index, Usize *len) {
+func Bool dictator_getMatch(const dictator_Replacer *replacer, const dictator_Pattern *pattern, const String8 buffer, const Usize index, Usize *len, dictator_Match *match) {
+	assert(match != NULL);
 	switch (pattern->kind) {
 	case dictator_PatternKind_String: {
 		if (pattern->as.string.len <= buffer.len - index) {
 			if (strEq(pattern->as.string, strSlice(buffer, index, pattern->as.string.len))) {
 				*len = pattern->as.string.len;
+				if (match != NULL) {
+					match->index = index;
+					match->len = *len;
+				}
 				return true;
 			}
 		}
@@ -1156,9 +1183,17 @@ func Bool dictator_doesMatch(const dictator_Replacer *replacer, const dictator_P
 		if (strEq(pattern->as.identifier, S("#"))) {
 			if (index == 0) {
 				*len = 0;
+				if (match != NULL) {
+					match->index = index;
+					match->len = *len;
+				}
 				return true;
 			} else if (charIsWhitespace(buffer.buf[index])) {
 				*len = 1;
+				if (match != NULL) {
+					match->index = index;
+					match->len = *len;
+				}
 				return true;
 			} else {
 				return false;
@@ -1173,17 +1208,54 @@ func Bool dictator_doesMatch(const dictator_Replacer *replacer, const dictator_P
 	case dictator_PatternKind_Or: {
 		Usize orIndex = 0;
 		for (orIndex = 0; orIndex < pattern->as.or.len; orIndex += 1) {
-			if (dictator_doesMatch(replacer, &pattern->as.or.items[orIndex], buffer, index, len)) {
+			if (dictator_getMatch(replacer, &pattern->as.or.items[orIndex], buffer, index, len, match)) {
+				if (match != NULL) {
+					match->index = index;
+					match->len = *len;
+				}
 				return true;
 			}
 		}
 		return false;
 	} break;
 	case dictator_PatternKind_Concatenation: {
+		/* Usize concatenationIndex = 0; */
+		/* for ( */
+		/* 	concatenationIndex = 0; */
+		/* 	concatenationIndex < pattern->as.concatenation.len; */
+		/* 	concatenationIndex += 1 */
+		/* ) { */
+		/* 	if ( */
+		/* 		dictator_doesMatch( */
+		/* 			replacer, */
+		/* 			&pattern->as.concatenation.items[concatenationIndex], */
+		/* 			buffer, */
+		/* 			index, */
+		/* 			len */
+		/* 		) */
+		/* 	) { */
+		/* 		return true; */
+		/* 	} */
+		/* } */
+		/* return false; */
 		assert(0);
 	} break;
 	case dictator_PatternKind_List: {
-		assert(0);
+		Usize listIndex = 0;
+		assert(match != NULL);
+		for (listIndex = 0; listIndex < pattern->as.or.len; listIndex += 1) {
+			Usize listIndicesLen = match->listIndices.len;
+			if (dictator_getMatch(replacer, &pattern->as.list.items[listIndex], buffer, index, len, match)) {
+				match->index = index;
+				match->len = *len;
+				da_appendZ(&match->listIndices);
+				memmove(&match->listIndices.items[listIndicesLen + 1], &match->listIndices.items[listIndicesLen], (match->listIndices.len - listIndicesLen) * sizeof(*match->listIndices.items));
+				match->listIndices.items[listIndicesLen] = listIndex;
+				/* replace with da_insert later */
+				return true;
+			}
+		}
+		return false;
 	} break;
 	}
 	assert(0);
@@ -1200,9 +1272,11 @@ func Void dictator_getMatches(const dictator_Replacer *replacer, const dictator_
 			Usize totalLen = 0;
 			Usize currentLen = 0;
 			Usize added = 0;
+
 			assert(rule->when.kind == dictator_PatternKind_Concatenation);
 			for (whenIndex = 0; whenIndex < rule->when.as.concatenation.len; whenIndex += 1) {
 				const dictator_Pattern *pattern = &rule->when.as.concatenation.items[whenIndex];
+				dictator_Match match = {0};
 				Bool isMain = false;
 				if (
 					pattern->kind == dictator_PatternKind_Identifier &&
@@ -1212,11 +1286,15 @@ func Void dictator_getMatches(const dictator_Replacer *replacer, const dictator_
 					pattern = &rule->before;
 				}
 
-				if (dictator_doesMatch(replacer, pattern, buffer, index + totalLen, &currentLen)) {
+				if (dictator_getMatch(replacer, pattern, buffer, index + totalLen, &currentLen, &match)) {
 					if (isMain) {
 						added += 1;
-						da_append(matches, dictator_match(index + totalLen, currentLen));
+						/* da_append(matches, dictator_match(index + totalLen, currentLen)); */
+						da_append(matches, match);
 					}
+					/* if (listIndex != -1) { */
+					/* 	da_append(&matches->listIndices, listIndex); */
+					/* } */
 					totalLen += currentLen;
 				} else {
 					/* THIS IS VERY IMPORTANT!!! */
@@ -1229,27 +1307,117 @@ func Void dictator_getMatches(const dictator_Replacer *replacer, const dictator_
 				}
 			}
 		} else {
-			if (dictator_doesMatch(replacer, &rule->before, buffer, index, &len)) {
+			dictator_Match match = {0};
+			if (dictator_getMatch(replacer, &rule->before, buffer, index, &len, &match)) {
 				if (len > 0) {
-					da_append(matches, dictator_match(index, len));
+					da_append(matches, match);
 				}
+				/* if (listIndex != -1) { */
+				/* 	da_append(&matches->listIndices, listIndex); */
+				/* } */
 			}
 		}
 	}
 }
 
+/* ([a, b, c] or [x, y, z]) d e -> [f, g, h] i j */
+
+struct StringBuilder {
+	String8 *items;
+	Usize len;
+	Usize capacity;
+};
+
+func Void stringBuilder_build(StringBuilder *sb, String8 *out) {
+	Usize totalLen = 0, i = 0;
+	for (i = 0; i < sb->len; i += 1) {
+		totalLen += sb->items[i].len;
+	}
+	out->buf = malloc(totalLen);
+	out->len = 0;
+	i = 0;
+	while (out->len < totalLen) {
+		memcpy(&out->buf[out->len], sb->items[i].buf, sb->items[i].len);
+		assert(i < sb->len);
+		out->len += sb->items[i].len;
+		i += 1;
+	}
+	assert(out->len == totalLen);
+}
+
+func Void dictator_addPatternToStringBuilder(const dictator_Match *match, Usize *listIndicesIndex, const dictator_Pattern *pattern, StringBuilder *sb) {
+	if (pattern->kind == dictator_PatternKind_String) {
+		da_append(sb, pattern->as.string);
+	} else if (pattern->kind == dictator_PatternKind_SmallInteger) {
+		assert(0);
+	} else if (pattern->kind == dictator_PatternKind_List) {
+		Usize listIndex = 0;
+		assert(*listIndicesIndex < match->listIndices.len);
+		listIndex = match->listIndices.items[*listIndicesIndex];
+		*listIndicesIndex += 1;
+		assert(listIndex < pattern->as.list.len);
+		dictator_addPatternToStringBuilder(
+			match,
+			listIndicesIndex,
+			&pattern->as.list.items[listIndex],
+			sb
+		);
+	}
+}
+
+func Void dictator_getReplacementString(const dictator_Matches *matches, Usize index, const dictator_Rule *rule, String8 *replacementString) {
+	/* Usize i = 0, j = 0; */
+	/* fprintf(stderr, "markedIndices: "); */
+	/* for (i = 0; i < matches->markedIndices.len; i += 1) { */
+	/* 	fprintf(stderr, "%d ", matches->markedIndices.items[i]); */
+	/* } */
+	/* fprintf(stderr, "\n"); */
+	/* fprintf(stderr, "matches:\n"); */
+	/* for (i = 0; i < matches->len; i += 1) { */
+	/* 	fprintf(stderr, "  %ld %ld", matches->items[i].index, matches->items[i].len); */
+	/* 	fprintf(stderr, "  listIndices: "); */
+	/* 	for (j = 0; j < matches->items[i].listIndices.len; j += 1) { */
+	/* 		fprintf(stderr, "%d ", matches->items[i].listIndices.items[j]); */
+	/* 	} */
+	/* 	fprintf(stderr, "\n"); */
+	/* } */
+	/* fprintf(stderr, "\n"); */
+
+	{
+		StringBuilder rbuf = {0};
+		const dictator_Pattern *plist = NULL;
+		Usize len = 0, i = 0, listIndicesIndex = 0;
+		const dictator_Match *match = &matches->items[index];
+
+		if (rule->after.kind == dictator_PatternKind_Concatenation) {
+			plist = rule->after.as.concatenation.items;
+			len   = rule->after.as.concatenation.len;
+		} else {
+			plist = &rule->after;
+			len = 1;
+		}
+
+		for (i = 0; i < len; i += 1) {
+			dictator_addPatternToStringBuilder(match, &listIndicesIndex, &plist[i], &rbuf);
+		}
+
+		stringBuilder_build(&rbuf, replacementString);
+	}
+
+	/* assert(rule->after.kind == dictator_PatternKind_String); */
+	/* replacementString->buf = rule->after.as.string.buf; */
+	/* replacementString->len = rule->after.as.string.len; */
+}
+
 func Void dictator_applyRule(const dictator_Replacer *replacer, const dictator_Rule *rule, const String8 buffer, String8 *newBuffer) {
 	dictator_Matches matches = {0};
-	Usize matchIndex = 0;
-	Usize newIndex = 0, newLen = buffer.len;
+	DynamicArray(String8) builder = {0};
+	String8 replacementString = {0};
+	Usize matchIndex = 0, builderIndex = 0;
+	Usize newIndex = 0, newLen = 0;
 	Usize oldIndex = 0, oldLen = buffer.len;
 
 	dictator_getMatches(replacer, rule, buffer, &matches);
-	assert(rule->after.kind == dictator_PatternKind_String);
-	for (matchIndex = 0; matchIndex < matches.len; matchIndex += 1) {
-		newLen -= matches.items[matchIndex].len;
-		newLen += rule->after.as.string.len;
-	}
 
 	if (matches.len == 0) {
 		newBuffer->buf = strdup(buffer.buf);
@@ -1257,33 +1425,44 @@ func Void dictator_applyRule(const dictator_Replacer *replacer, const dictator_R
 		return;
 	}
 
-	newBuffer->buf = malloc(newLen);
-	newBuffer->len = newLen;
-
 	for (matchIndex = 0; matchIndex < matches.len; matchIndex += 1) {
 		/* append to buffer */
 		Usize copyLen = matches.items[matchIndex].index - oldIndex;
 		assert(matches.items[matchIndex].index >= oldIndex);
 		if (copyLen > 0) {
-			memcpy(&newBuffer->buf[newIndex], &buffer.buf[oldIndex], copyLen);
+			da_append(&builder, strSlice(buffer, oldIndex, copyLen));
 			newIndex += copyLen;
 			oldIndex += copyLen;
 		}
 		oldIndex += matches.items[matchIndex].len;
-		memcpy(&newBuffer->buf[newIndex], rule->after.as.string.buf, rule->after.as.string.len);
-		newIndex += rule->after.as.string.len;
+		dictator_getReplacementString(&matches, matchIndex, rule, &replacementString);
+		da_append(&builder, replacementString);
+		newIndex += replacementString.len;
 	}
+
 	/* last one */
-	if (newIndex != newLen) {
+	if (oldIndex != oldLen) {
 		Usize copyLen = oldLen - oldIndex;
 		assert(oldLen > oldIndex);
 		assert(copyLen > 0);
-		memcpy(&newBuffer->buf[newIndex], &buffer.buf[oldIndex], copyLen);
+		da_append(&builder, strSlice(buffer, oldIndex, copyLen));
 		newIndex += copyLen;
 		oldIndex += copyLen;
 	}
 
+	for (builderIndex = 0; builderIndex < builder.len; builderIndex += 1) {
+		newLen += builder.items[builderIndex].len;
+	}
+	newBuffer->buf = malloc(newLen);
+	newBuffer->len = 0;
+	for (builderIndex = 0; builderIndex < builder.len; builderIndex += 1) {
+		memcpy(&newBuffer->buf[newBuffer->len], builder.items[builderIndex].buf, builder.items[builderIndex].len);
+		newBuffer->len += builder.items[builderIndex].len;
+	}
+	assert(newBuffer->len == newLen);
+
 	da_free(&matches);
+	da_free(&builder);
 }
 
 func Bool dictator_getDefinition(dictator_Replacer *replacer, String8 name, dictator_Pattern *pattern) {
@@ -1327,8 +1506,17 @@ func Bool dictator_preprocessPattern(dictator_Replacer *replacer, dictator_Patte
 	case dictator_PatternKind_Concatenation: {
 		Usize concatenationIndex = 0;
 		Bool changed = false;
-		for (concatenationIndex = 0; concatenationIndex < pattern->as.concatenation.len; concatenationIndex += 1) {
-			if (dictator_preprocessPattern(replacer, &pattern->as.concatenation.items[concatenationIndex])) {
+		for (
+			concatenationIndex = 0;
+			concatenationIndex < pattern->as.concatenation.len;
+			concatenationIndex += 1
+		) {
+			if (
+				dictator_preprocessPattern(
+					replacer,
+					&pattern->as.concatenation.items[concatenationIndex]
+				)
+			) {
 				changed = true;
 			}
 		}
@@ -1366,8 +1554,6 @@ Void dictator_preprocessRules(dictator_Replacer *replacer) {
 }
 
 func Void dictator_preprocess(dictator_Replacer *replacer) {
-	/* const Usize maxIter = 5000; */
-	/* Usize iterCount = 0; */
 	dictator_preprocessDefinitions(replacer);
 	dictator_preprocessRules(replacer);
 }
