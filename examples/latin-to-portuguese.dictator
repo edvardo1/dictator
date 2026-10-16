@@ -7,34 +7,26 @@ define consonant =
 
 rule "s" or "m" -> "" when _ #
 
--- rule ["ā", "ē", "ī", "ō", "ū"] -> ["a", "e", "i", "o", "u"]
-rule "ā" -> "a"
-rule "ē" -> "e"
-rule "ī" -> "i"
-rule "ō" -> "o"
-rule "ū" -> "u"
+rule ["ā", "ē", "ī", "ō", "ū"] -> ["a", "e", "i", "o", "u"]
 
 rule "e" -> "" when vowel "r" _ #
 rule "i" -> "j" when _ vowel
 
--- rule "k" -> "ts" -> "c" when _ "e" or "i"
 rule "j" -> "dʒ" when # _
 rule "dʒ" -> "ʒ"
 
--- rule ["p", "t", "k"] -> ["b", "d", "g"] when vowel _ vowel
-rule "p" -> "b" when vowel _ vowel
-rule "t" -> "d" when vowel _ vowel
-rule "k" -> "g" when vowel _ vowel
+rule ["p", "t", "k"] -> ["b", "d", "g"] when vowel _ vowel
 
--- rule "k" -> "ts" -> "c" when _ "e" or "i"
 rule "k" -> "ts" when _ "e" or "i"
 rule "ts" -> "s"
 
 rule "v" -> "" when vowel _ vowel
 rule "u" -> "o" when _ #
 rule "gn" -> "nh"
+
 rule "k" -> "i" when "i" or "e" _ "t"
 rule "k" -> "u" when "o" or "u" _ "t"
+
 rule "p" -> "" when vowel _ "t"
 rule "ii" -> "i"
 rule "e" -> "" when consonant _ "r" vowel
