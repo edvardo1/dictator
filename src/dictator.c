@@ -339,6 +339,24 @@ commentLabel:
 				*token = tokenizer->token;
 			}
 			return 0;
+		} else if (charIsDigit(c)) {
+			Int number = 0;
+			Usize totalLen = 0;
+			for (;;) {
+				err = dictator_tokenizer__peekChar(tokenizer, &c);
+				if (charIsDigit(c)) {
+					number = number * 10 + (c - '0');
+					totalLen += 1;
+					assert(err == dictator_tokenizer__popChar(tokenizer, &c));
+				} else {
+					tokenizer->token.kind = dictator_TokenKind_SmallInteger;
+					tokenizer->token.as.smallInteger = number;
+					if (token != NULL) {
+						*token = tokenizer->token;
+					}
+					return 0;
+				}
+			}
 		} else {
 			Bool isSingleQuote = false;
 			if (c == '"' || c == '\'') {
