@@ -916,7 +916,9 @@ func Void dictator_getMatches(const dictator_Replacer *replacer, const dictator_
 	}
 }
 
-func Void dictator_addPatternToStringBuilder(const dictator_Match *match, Usize *listIndicesIndex, const dictator_Pattern *pattern, StringBuilder *sb) {
+func Void dictator_addPatternToStringBuilder(const dictator_Replacer *replacer, const dictator_Match *match, Usize *listIndicesIndex, const dictator_Pattern *pattern, StringBuilder *sb) {
+	UNUSED(replacer);
+
 	if (pattern->kind == dictator_PatternKind_String) {
 		da_append(sb, pattern->as.string);
 	} else if (pattern->kind == dictator_PatternKind_SmallInteger) {
@@ -928,6 +930,7 @@ func Void dictator_addPatternToStringBuilder(const dictator_Match *match, Usize 
 		*listIndicesIndex += 1;
 		assert(listIndex < pattern->as.list.len);
 		dictator_addPatternToStringBuilder(
+			replacer,
 			match,
 			listIndicesIndex,
 			&pattern->as.list.items[listIndex],
@@ -936,7 +939,7 @@ func Void dictator_addPatternToStringBuilder(const dictator_Match *match, Usize 
 	}
 }
 
-func Void dictator_getReplacementString(const dictator_Matches *matches, Usize index, const dictator_Rule *rule, String8 *replacementString) {
+func Void dictator_getReplacementString(const dictator_Replacer *replacer, const dictator_Matches *matches, Usize index, const dictator_Rule *rule, String8 *replacementString) {
 	StringBuilder rbuf = {0};
 	const dictator_Pattern *plist = NULL;
 	Usize len = 0, i = 0, listIndicesIndex = 0;
@@ -951,7 +954,7 @@ func Void dictator_getReplacementString(const dictator_Matches *matches, Usize i
 	}
 
 	for (i = 0; i < len; i += 1) {
-		dictator_addPatternToStringBuilder(match, &listIndicesIndex, &plist[i], &rbuf);
+		dictator_addPatternToStringBuilder(replacer, match, &listIndicesIndex, &plist[i], &rbuf);
 	}
 
 	stringBuilder_build(&rbuf, replacementString);
@@ -983,7 +986,7 @@ func Void dictator_applyRule(const dictator_Replacer *replacer, const dictator_R
 			oldIndex += copyLen;
 		}
 		oldIndex += matches.items[matchIndex].len;
-		dictator_getReplacementString(&matches, matchIndex, rule, &replacementString);
+		dictator_getReplacementString(replacer, &matches, matchIndex, rule, &replacementString);
 		da_append(&builder, replacementString);
 		newIndex += replacementString.len;
 	}
