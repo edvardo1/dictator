@@ -533,6 +533,7 @@ struct dictator_Rule {
 struct dictator_Replacer {
 	DynamicArray(dictator_Rule) rules;
 	DynamicArray(dictator_Definition) definitions;
+	String8 buffer;
 };
 
 func Int dictator_tryParsePatternPrimary(dictator_Parser *parser, dictator_Pattern *pattern) {
@@ -1218,6 +1219,7 @@ func Int main(Int argc, Char **argv) {
 	{
 		String8 buffer = textBuffer;
 		String8 newBuffer = {0};
+		replacer.buffer = textBuffer;
 		Usize ruleIndex = 0;
 		for (ruleIndex = 0; ruleIndex < replacer.rules.len; ruleIndex += 1) {
 			dictator_applyRule(&replacer, &replacer.rules.items[ruleIndex], buffer, &newBuffer);
