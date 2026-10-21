@@ -733,10 +733,16 @@ func Int dictator_tryParseReplacer(dictator_Parser *parser, dictator_Replacer *s
 	return 0;
 }
 
+struct dictator_Mark {
+	Usize index;
+	Usize len;
+};
+
 struct dictator_Match {
 	Usize index;
 	Usize len;
 	DynamicArray(I32) listIndices;
+	DynamicArray(dictator_Mark) marks;
 };
 
 func dictator_Match dictator_match(Usize index, Usize len) {
@@ -759,6 +765,10 @@ func Bool dictator_getMatch(const dictator_Replacer *replacer, const dictator_Pa
 	case dictator_PatternKind_String: {
 		if (pattern->as.string.len <= buffer.len - index) {
 			if (strEq(pattern->as.string, strSlice(buffer, index, pattern->as.string.len))) {
+				if (pattern->marked && match != NULL) {
+					dictator_Mark mark = {index, pattern->as.string.len};
+					da_append(&match->marks, mark);
+				}
 				*len = pattern->as.string.len;
 				if (match != NULL) {
 					match->index = index;
@@ -771,6 +781,7 @@ func Bool dictator_getMatch(const dictator_Replacer *replacer, const dictator_Pa
 	} break;
 	case dictator_PatternKind_Identifier: {
 		if (strEq(pattern->as.identifier, S("#"))) {
+			assert(!pattern->marked);
 			if (index == 0) {
 				*len = 0;
 				if (match != NULL) {
@@ -799,6 +810,10 @@ func Bool dictator_getMatch(const dictator_Replacer *replacer, const dictator_Pa
 		Usize orIndex = 0;
 		for (orIndex = 0; orIndex < pattern->as.or.len; orIndex += 1) {
 			if (dictator_getMatch(replacer, &pattern->as.or.items[orIndex], buffer, index, len, match)) {
+				if (pattern->marked && match != NULL) {
+					dictator_Mark mark = {index, pattern->as.string.len};
+					da_append(&match->marks, mark);
+				}
 				if (match != NULL) {
 					match->index = index;
 					match->len = *len;
@@ -851,6 +866,10 @@ func Bool dictator_getMatch(const dictator_Replacer *replacer, const dictator_Pa
 			if (dictator_getMatch(replacer, &pattern->as.list.items[listIndex], buffer, index, len, match)) {
 				match->index = index;
 				match->len = *len;
+				if (pattern->marked && match != NULL) {
+					dictator_Mark mark = {index, *len};
+					da_append(&match->marks, mark);
+				}
 				da_appendZ(&match->listIndices);
 				memmove(&match->listIndices.items[listIndicesLen + 1], &match->listIndices.items[listIndicesLen], (match->listIndices.len - listIndicesLen) * sizeof(*match->listIndices.items));
 				match->listIndices.items[listIndicesLen] = listIndex;
@@ -922,7 +941,12 @@ func Void dictator_addPatternToStringBuilder(const dictator_Replacer *replacer, 
 	if (pattern->kind == dictator_PatternKind_String) {
 		da_append(sb, pattern->as.string);
 	} else if (pattern->kind == dictator_PatternKind_SmallInteger) {
-		assert(0);
+		Int i = pattern->as.smallInteger - 1;
+		dictator_Mark mark = {0};
+		assert(i < (Int)match->marks.len);
+		mark = match->marks.items[i];
+		assert(mark.index + mark.len <= replacer->buffer.len);
+		da_append(sb, strSlice(replacer->buffer, mark.index, mark.len));
 	} else if (pattern->kind == dictator_PatternKind_List) {
 		Usize listIndex = 0;
 		assert(*listIndicesIndex < match->listIndices.len);
