@@ -810,26 +810,39 @@ func Bool dictator_getMatch(const dictator_Replacer *replacer, const dictator_Pa
 		return false;
 	} break;
 	case dictator_PatternKind_Concatenation: {
-		/* Usize concatenationIndex = 0; */
-		/* for ( */
-		/* 	concatenationIndex = 0; */
-		/* 	concatenationIndex < pattern->as.concatenation.len; */
-		/* 	concatenationIndex += 1 */
-		/* ) { */
-		/* 	if ( */
-		/* 		dictator_doesMatch( */
-		/* 			replacer, */
-		/* 			&pattern->as.concatenation.items[concatenationIndex], */
-		/* 			buffer, */
-		/* 			index, */
-		/* 			len */
-		/* 		) */
-		/* 	) { */
-		/* 		return true; */
-		/* 	} */
-		/* } */
-		/* return false; */
-		assert(0);
+		Usize concatenationIndex = 0;
+		Usize currentIndex = index;
+		*len = 0;
+		for (
+			concatenationIndex = 0;
+			concatenationIndex < pattern->as.concatenation.len;
+			concatenationIndex += 1
+		) {
+			Usize currentLen = 0;
+			if (
+				!dictator_getMatch(
+					replacer,
+					&pattern->as.concatenation.items[concatenationIndex],
+					buffer,
+					currentIndex,
+					&currentLen,
+					match
+				)
+			) {
+				return false;
+			}
+			currentIndex += currentLen;
+		}
+		*len = currentIndex - index;
+		if (pattern->marked && match != NULL) {
+			dictator_Mark mark = {index, *len};
+			da_append(&match->marks, mark);
+		}
+		if (match != NULL) {
+			match->index = index;
+			match->len = *len;
+		}
+		return true;
 	} break;
 	case dictator_PatternKind_List: {
 		Usize listIndex = 0;
