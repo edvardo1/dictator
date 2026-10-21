@@ -1109,7 +1109,7 @@ func Void dictator_preprocess(dictator_Replacer *replacer) {
 	dictator_preprocessRules(replacer);
 }
 
-func Void slurpFile(String8 filepath, String8 *out) {
+func Int slurpFile(String8 filepath, String8 *out) {
 	if (strEq(filepath, S("-"))) {
 		Usize size = 1024;
 		out->buf = calloc(size, 1);
@@ -1125,11 +1125,16 @@ func Void slurpFile(String8 filepath, String8 *out) {
 		out->len = strlen(out->buf);
 	} else {
 		FILE *fp = fopen(filepath.buf, "r");
+		if (fp == NULL) {
+			fprintf(stderr, "ERROR: could not open file \"%.*s\"", Slens(filepath));
+			return 1;
+		}
 		readWholeFile(fp, NULL, &out->len);
 		out->buf = malloc(out->len);
 		readWholeFile(fp, (U8 **)&out->buf, &out->len);
 		fclose(fp);
 	}
+	return 0;
 }
 
 func Void showFormat() {
@@ -1143,6 +1148,7 @@ func Int main(Int argc, Char **argv) {
 	String8 rulesSource = {0}, textSource = {0};
 	String8 rulesBuffer = {0}, textBuffer = {0};
 	Bool providedRules = false, providedText = false;
+	Int err = 0;
 
 	argc -= 1;
 	argv += 1;
@@ -1197,8 +1203,14 @@ func Int main(Int argc, Char **argv) {
 	assert(rulesSource.len != 0);
 	assert(textSource.len != 0);
 
-	slurpFile(rulesSource, &rulesBuffer);
-	slurpFile(textSource, &textBuffer);
+	err = slurpFile(rulesSource, &rulesBuffer);
+	if (err) {
+		return err;
+	}
+	err = slurpFile(textSource, &textBuffer);
+	if (err) {
+		return err;
+	}
 
 	dictator_tokenizer_init(&parser.tokenizer, rulesBuffer);
 	assert(dictator_tryParseReplacer(&parser, &replacer) == 0);
