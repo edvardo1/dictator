@@ -749,8 +749,6 @@ struct dictator_Matches {
 	dictator_Match *items;
 	Usize len;
 	Usize capacity;
-
-	DynamicArray(I32) markedIndices;
 };
 
 /* maybe change replacer to Environment */
