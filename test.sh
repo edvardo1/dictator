@@ -27,3 +27,4 @@ fi
 echo testing...
 expect "latin to portuguese" latin-to-portuguese.dictator portuguese.txt expected-portuguese-from-latin.txt
 expect "list" test-list.dictator test-list.txt expected-test-list.txt
+expect "marked" marked.dictator marked.txt expected-marked.txt
